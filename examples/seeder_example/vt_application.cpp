@@ -106,6 +106,7 @@ bool SeederVtApplication::initialize()
 		TCClientInterface.configure(ddop, 1, 255, 255, true, true, true, false, true);
 		TCClientInterface.add_request_value_callback(SectionControlImplementSimulator::request_value_command_callback, &sectionControl);
 		TCClientInterface.add_value_command_callback(SectionControlImplementSimulator::value_command_callback, &sectionControl);
+		TCClientInterface.add_default_process_data_requested_callback(SectionControlImplementSimulator::default_process_data_request_callback, &sectionControl);
 		TCClientInterface.initialize(true);
 	}
 	else
@@ -184,6 +185,8 @@ void SeederVtApplication::handle_vt_key_events(const isobus::VirtualTerminalClie
 				{
 					update_section_objects(i);
 				}
+				TCClientInterface.on_value_changed_trigger(static_cast<std::uint16_t>(SectionControlImplementSimulator::ImplementDDOPElementNumbers::BoomElement),
+				                                           static_cast<std::uint16_t>(isobus::DataDescriptionIndex::RequestDefaultProcessData));
 			}
 			break;
 

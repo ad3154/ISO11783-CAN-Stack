@@ -306,7 +306,7 @@ namespace isobus
 			};
 
 			/// @brief Enumerates the trigger methods that can be set in the available trigger bitset of this object
-			enum class AvailableTriggerMethods
+			enum class AvailableTriggerMethods : std::uint8_t
 			{
 				TimeInterval = 0x01, ///< The device can provide these device process data based on a time interval
 				DistanceInterval = 0x02, ///< The device can provide these device process data based on a distance interval.

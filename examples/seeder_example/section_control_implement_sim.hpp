@@ -11,7 +11,7 @@
 
 #include "isobus/isobus/can_NAME.hpp"
 #include "isobus/isobus/can_message.hpp"
-#include "isobus/isobus/isobus_device_descriptor_object_pool.hpp"
+#include "isobus/isobus/isobus_task_controller_client.hpp"
 
 /// @brief Simulates a planter rate controller with section control
 /// @note This is just an example. A real rate controller will obviously need to control rate and section
@@ -105,6 +105,17 @@ public:
 		CountPerAreaPresentation ///< Describes to the TC how to display volume per area units
 	};
 
+	/// @brief Enumerates the elements in the DDOP for easier reference in the application
+	enum class ImplementDDOPElementNumbers : std::uint16_t
+	{
+		DeviceElement = 0,
+		ConnectorElement = 1,
+		BoomElement = 2,
+		BinElement = 3,
+		Section1Element = 4,
+		SectionMaxElement = Section1Element + (MAX_NUMBER_SECTIONS_SUPPORTED - 1)
+	};
+
 	/// @brief Constructor for the simulator
 	/// @param[in] value The number of sections to track for section control
 	explicit SectionControlImplementSimulator(std::uint8_t value);
@@ -166,6 +177,17 @@ public:
 	/// @param[in] clientName The ISO NAME to generate the DDOP for
 	/// @returns true if the DDOP was successfully created, otherwise false
 	bool create_ddop(std::shared_ptr<isobus::DeviceDescriptorObjectPool> poolToPopulate, isobus::NAME clientName) const;
+
+	/// @brief Sets up default triggers for various elements in the DDOP when the TC requests it.
+	/// @param[in] elementNumber The element number to set up triggers for if applicable
+	/// @param[in] DDI The DDI to set up triggers for if applicable
+	/// @param[out] returnedSettings The settings to return to the TC
+	/// @param[in] parentPointer A pointer to the class instance this callback is for
+	/// @returns true if the triggers were set up successfully, otherwise false if no triggers needed to be configured
+	static bool default_process_data_request_callback(std::uint16_t elementNumber,
+	                                                  std::uint16_t DDI,
+	                                                  isobus::TaskControllerClient::DefaultProcessDataSettings &returnedSettings,
+	                                                  void *parentPointer);
 
 	/// @brief A callback that will be used by the TC client to read values
 	/// @param[in] elementNumber The element number associated to the value being requested

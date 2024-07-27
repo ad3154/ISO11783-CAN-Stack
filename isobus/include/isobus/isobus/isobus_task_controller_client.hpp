@@ -32,7 +32,7 @@ namespace isobus
 			Disconnected, ///< Not communicating with the TC
 			WaitForStartUpDelay, ///< Client is waiting for the mandatory 6s startup delay
 			WaitForServerStatusMessage, ///< Client is waiting to identify the TC via reception of a valid status message
-			SendWorkingSetMaster, ///< Client initating communication with TC by sending the working set master message
+			SendWorkingSetMaster, ///< Client initiating communication with TC by sending the working set master message
 			SendStatusMessage, ///< Enables sending the status message
 			RequestVersion, ///< Requests the TC version and related data from the TC
 			WaitForRequestVersionResponse, ///< Waiting for the TC to respond to a request for its version
@@ -64,7 +64,7 @@ namespace isobus
 		{
 			DraftInternationalStandard = 0, ///< The version of the DIS (draft International Standard).
 			FinalDraftInternationalStandardFirstEdition = 1, ///< The version of the FDIS.1 (final draft International Standard, first edition).
-			FirstPublishedEdition = 2, ///< The version of the FDIS.2 and the first edition published ss an International Standard.
+			FirstPublishedEdition = 2, ///< The version of the FDIS.2 and the first edition published as an International Standard.
 			SecondEditionDraft = 3, ///< The version of the second edition published as a draft International Standard(E2.DIS).
 			SecondPublishedEdition = 4, ///< The version of the second edition published as the final draft International Standard(E2.FDIS) and as the International Standard(E2.IS)
 			Unknown = 0xFF
@@ -83,11 +83,37 @@ namespace isobus
 			ReservedOption3 = 0x80
 		};
 
+		/// @brief Used to describe the triggers to set up by default when the
+		/// the TC server requests the default process data from the client.
+		struct DefaultProcessDataSettings
+		{
+			std::int32_t timeTriggerInterval_ms = 0; ///< The time interval for sending the data element specified by the data dictionary identifier.
+			std::int32_t distanceTriggerInterval_mm = 0; ///< The distance interval for sending the data element specified by the data dictionary identifier.
+			std::int32_t minimumWithinThreshold = 0; ///< The value of this data element is sent to the TC or DL when the value is higher than the threshold value.
+			std::int32_t maximumWithinThreshold = 0; ///< The value of this data element is sent to the TC or DL when the value is lower than the threshold value.
+			std::int32_t changeThreshold = 0; ///< The value of this data element is sent to the TC or DL when the value change is higher than or equal to the change threshold since last transmission.
+			bool enableTimeTrigger = false; ///< Enable the time trigger
+			bool enableDistanceTrigger = false; ///< Enable the distance trigger
+			bool enableMinimumWithinThresholdTrigger = false; ///< Enable the minimum within threshold trigger
+			bool enableMaximumWithinThresholdTrigger = false; ///< Enable the maximum within threshold trigger
+			bool enableChangeThresholdTrigger = false; ///< Enable the change threshold trigger
+		};
+
 		/// @brief A callback for handling a value request command from the TC
 		using RequestValueCommandCallback = bool (*)(std::uint16_t elementNumber,
 		                                             std::uint16_t DDI,
 		                                             std::int32_t &processVariableValue,
 		                                             void *parentPointer);
+
+		/// @brief A callback for handling a default process data request from the TC.
+		/// This callback is used to set up the default process data settings for a process data variable
+		/// when the TC requests the default process data from the client. When this callback is called, you should
+		/// edit the content of the `returnedSettings` parameter to set up the triggers you want to use by default for
+		/// this process data variable.
+		using DefaultProcessDataRequestedCallback = bool (*)(std::uint16_t elementNumber,
+		                                                     std::uint16_t DDI,
+		                                                     DefaultProcessDataSettings &returnedSettings,
+		                                                     void *parentPointer);
 
 		/// @brief A callback for handling a set value command from the TC
 		using ValueCommandCallback = bool (*)(std::uint16_t elementNumber,
@@ -110,6 +136,16 @@ namespace isobus
 		/// by calling the `update` function.
 		void initialize(bool spawnThread);
 
+		/// @brief This function adds a callback that will be called when the TC requests the default process data from the client.
+		/// When starting a task, the task controller will often send a request for the default process data from the client.
+		/// When the stack receives those messages, it will call each callback you've added add with this function until one returns true.
+		/// When a callback returns true, the stack will use the settings provided by that callback to set up the triggers for the process data variable.
+		/// The stack will then send the process data to the TC, and set up the triggers for the process data variable as requested by the callback.
+		/// @note The TC may overwrite your desired trigger settings if it wants to. The values you set here are just defaults.
+		/// @param[in] callback The callback to add
+		/// @param[in] parentPointer A generic context variable that will be passed into the associated callback when it gets called
+		void add_default_process_data_requested_callback(DefaultProcessDataRequestedCallback callback, void *parentPointer);
+
 		/// @brief This adds a callback that will be called when the TC requests the value of one of your variables.
 		/// @details The task controller will often send a request for the value of a process data variable.
 		/// When the stack receives those messages, it will call this callback to request the value from your
@@ -126,6 +162,11 @@ namespace isobus
 		/// @param[in] callback The callback to add
 		/// @param[in] parentPointer A generic context variable that will be passed into the associated callback when it gets called
 		void add_value_command_callback(ValueCommandCallback callback, void *parentPointer);
+
+		/// @brief Removes the specified callback from the list of default process data requested callbacks
+		/// @param[in] callback The callback to remove
+		/// @param[in] parentPointer parent pointer associated to the callback being removed
+		void remove_default_process_data_requested_callback(DefaultProcessDataRequestedCallback callback, void *parentPointer);
 
 		/// @brief Removes the specified callback from the list of value request callbacks
 		/// @param[in] callback The callback to remove
@@ -265,7 +306,7 @@ namespace isobus
 		bool get_is_initialized() const;
 
 		/// @brief Check whether the client is connected to the TC server
-		/// @returns true if cconnected, false otherwise
+		/// @returns true if connected, false otherwise
 		bool get_is_connected() const;
 
 		/// @brief Returns if a task is active as indicated by the TC
@@ -312,38 +353,44 @@ namespace isobus
 		/// @param[in] DDI The DDI of the process data variable that changed
 		void on_value_changed_trigger(std::uint16_t elementNumber, std::uint16_t DDI);
 
-		/// @brief Sends a broadcast request to TCs to identify themseleves.
+		/// @brief Sends a broadcast request to TCs to identify themselves.
 		/// @details Upon receipt of this message, the TC shall display, for a period of 3 s, the TC Number
 		/// @returns `true` if the message was sent, otherwise `false`
 		bool request_task_controller_identification() const;
 
 		/// @brief If the TC client is connected to a TC, calling this function will
-		/// cause the TC client interface to delete the currently active DDOP, reupload it,
+		/// cause the TC client interface to delete the currently active DDOP, re-upload it,
 		/// then reactivate it using the pool passed into the parameter of this function.
 		/// This process is faster than restarting the whole interface, and you have to
 		/// call it if you change certain things in your DDOP at runtime after the DDOP has already been activated.
 		/// @param[in] binaryDDOP The updated device descriptor object pool to upload to the TC
-		/// @returns true if the interface accepted the command to reupload the pool, or false if the command cannot be handled right now
+		/// @returns true if the interface accepted the command to re-upload the pool, or false if the command cannot be handled right now
 		bool reupload_device_descriptor_object_pool(std::shared_ptr<std::vector<std::uint8_t>> binaryDDOP);
 
 		/// @brief If the TC client is connected to a TC, calling this function will
-		/// cause the TC client interface to delete the currently active DDOP, reupload it,
+		/// cause the TC client interface to delete the currently active DDOP, re-upload it,
 		/// then reactivate it using the pool passed into the parameter of this function.
 		/// This process is faster than restarting the whole interface, and you have to
 		/// call it if you change certain things in your DDOP at runtime after the DDOP has already been activated.
 		/// @param[in] binaryDDOP The updated device descriptor object pool to upload to the TC
 		/// @param[in] DDOPSize The number of bytes in the binary DDOP that will be uploaded
-		/// @returns true if the interface accepted the command to reupload the pool, or false if the command cannot be handled right now
+		/// @returns true if the interface accepted the command to re-upload the pool, or false if the command cannot be handled right now
 		bool reupload_device_descriptor_object_pool(std::uint8_t const *binaryDDOP, std::uint32_t DDOPSize);
 
 		/// @brief If the TC client is connected to a TC, calling this function will
-		/// cause the TC client interface to delete the currently active DDOP, reupload it,
+		/// cause the TC client interface to delete the currently active DDOP, re-upload it,
 		/// then reactivate it using the pool passed into the parameter of this function.
 		/// This process is faster than restarting the whole interface, and you have to
 		/// call it if you change certain things in your DDOP at runtime after the DDOP has already been activated.
 		/// @param[in] DDOP The updated device descriptor object pool to upload to the TC
-		/// @returns true if the interface accepted the command to reupload the pool, or false if the command cannot be handled right now
+		/// @returns true if the interface accepted the command to re-upload the pool, or false if the command cannot be handled right now
 		bool reupload_device_descriptor_object_pool(std::shared_ptr<DeviceDescriptorObjectPool> DDOP);
+
+		/// @brief If your application has any distance triggers set up in the DDOP, you can call this function
+		/// to update the distance that the TC client uses to determine if it should send a process data value.
+		/// This should be the total distance driven by the vehicle since the application started. Not the difference between the last call and this call!
+		/// @param[in] distance The total, absolute distance in millimeters the vehicle has driven
+		void set_distance(std::uint32_t distance);
 
 		/// @brief The cyclic update function for this interface.
 		/// @note This function may be called by the TC worker thread if you called
@@ -368,7 +415,7 @@ namespace isobus
 			MeasurementMaximumWithinThreshold = 0x07, ///< The client has to send the value of this data element to the TC or DL when the value is lower than the threshold value.
 			MeasurementChangeThreshold = 0x08, ///< The client has to send the value of this data element to the TC or DL when the value change is higher than or equal to the change threshold since last transmission.
 			PeerControlAssignment = 0x09, ///< This message is used to establish a connection between a	setpoint value source and a setpoint value user
-			SetValueAndAcknowledge = 0x0A, ///< This command is used to set the value of a process data entity and request a reception acknowledgement from the recipient
+			SetValueAndAcknowledge = 0x0A, ///< This command is used to set the value of a process data entity and request a reception acknowledgment from the recipient
 			Reserved1 = 0x0B, ///< Reserved.
 			Reserved2 = 0x0C, ///< Reserved.
 			ProcessDataAcknowledge = 0x0D, ///< Message is a Process Data Acknowledge (PDACK).
@@ -403,9 +450,24 @@ namespace isobus
 			ChangeDesignatorResponse = 0x0D ///< Sent in response to Change Designator message
 		};
 
+		/// @brief Stores data related to requests and commands from the TC
+		struct ProcessDataCallbackInfo
+		{
+			/// @brief Allows easy comparison of callback data
+			/// @param obj the object to compare against
+			/// @returns true if the ddi and element numbers of the provided objects match, otherwise false
+			bool operator==(const ProcessDataCallbackInfo &obj) const;
+			std::int32_t processDataValue; ///< The value of the value set command
+			std::int32_t lastValue; ///< Used for measurement commands to store timestamp or previous values
+			std::uint16_t elementNumber; ///< The element number for the command
+			std::uint16_t ddi; ///< The DDI for the command
+			bool ackRequested; ///< Stores if the TC used the mux that also requires a PDACK
+			bool thresholdPassed; ///< Used when the structure is being used to track measurement command thresholds to know if the threshold has been passed
+		};
+
 		/// @brief The data callback passed to the network manger's send function for the transport layer messages
 		/// @details We upload the data with callbacks to avoid making yet another complete copy of the pool to
-		/// accommodate the multiplexor that needs to get passed to the transport layer message's first byte.
+		/// accommodate the multiplexer that needs to get passed to the transport layer message's first byte.
 		/// @param[in] callbackIndex The number of times the callback has been called
 		/// @param[in] bytesOffset The byte offset at which to get pool data
 		/// @param[in] numberOfBytesNeeded The number of bytes the protocol needs to send another frame (usually 7)
@@ -418,12 +480,42 @@ namespace isobus
 		                                                         std::uint8_t *chunkBuffer,
 		                                                         void *parentPointer);
 
+		/// @brief Adds a measurement change threshold to the queue of maintained triggers, checks for duplicates.
+		/// @param[in] info The information to add to the queue
+		void add_measurement_change_threshold(ProcessDataCallbackInfo &info);
+
+		/// @brief Adds a measurement distance interval to the queue of maintained triggers, checks for duplicates.
+		/// @param[in] info The information to add to the queue
+		void add_measurement_distance_interval(ProcessDataCallbackInfo &info);
+
+		/// @brief Adds a measurement time interval to the queue of maintained triggers, checks for duplicates.
+		/// @param[in] info The information to add to the queue
+		void add_measurement_time_interval(ProcessDataCallbackInfo &info);
+
+		/// @brief Adds a measurement max threshold to the queue of maintained triggers, checks for duplicates.
+		/// @param[in] info The information to add to the queue
+		void add_measurement_maximum_threshold(ProcessDataCallbackInfo &info);
+
+		/// @brief Adds a measurement minimum threshold to the queue of maintained triggers, checks for duplicates.
+		/// @param[in] info The information to add to the queue
+		void add_measurement_minimum_threshold(ProcessDataCallbackInfo &info);
+
 		/// @brief Clears all queued TC commands and responses
 		void clear_queues();
 
 		/// @brief Checks if a DDOP was provided via one of the configure functions
 		/// @returns true if a DDOP was provided, otherwise false
 		bool get_was_ddop_supplied() const;
+
+		/// @brief Sets up triggers for a process data variable based on the default process data settings
+		/// @param[in] processDataObject The process data variable, used to validate trigger compatibility with the DDOP
+		/// @param[in] elementNumber The element number of the process data variable
+		/// @param[in] DDI The DDI of the process data variable
+		/// @param[in] settings The default process data settings to use for setting up the triggers
+		void populate_any_triggers_from_settings(std::shared_ptr<task_controller_object::DeviceProcessDataObject> processDataObject,
+		                                         std::uint16_t elementNumber,
+		                                         std::uint16_t DDI,
+		                                         const DefaultProcessDataSettings &settings);
 
 		/// @brief Searches the DDOP for a device object and stores that object's structure and localization labels
 		void process_labels_from_ddop();
@@ -462,9 +554,9 @@ namespace isobus
 
 		/// @brief Sends a process data message with 1 mux byte and all 0xFFs as payload
 		/// @details This just reduces code duplication by consolidating common message formats
-		/// @param[in] multiplexor The multiplexor to use for the message
+		/// @param[in] multiplexer The multiplexer to use for the message
 		/// @returns `true` if the message was sent, otherwise `false`
-		bool send_generic_process_data(std::uint8_t multiplexor) const;
+		bool send_generic_process_data(std::uint8_t multiplexer) const;
 
 		/// @brief Sends the activate object pool message
 		/// @details This message is sent by a client to complete its connection procedure to a TC
@@ -568,22 +660,18 @@ namespace isobus
 		static constexpr std::uint16_t TWO_SECOND_TIMEOUT_MS = 2000; ///< Used for sending the status message to the TC
 
 	private:
-		/// @brief Stores data related to requests and commands from the TC
-		struct ProcessDataCallbackInfo
+		/// @brief Stores a default process data request callback along with its parent pointer
+		struct DefaultProcessDataRequestCallbackInfo
 		{
 			/// @brief Allows easy comparison of callback data
 			/// @param obj the object to compare against
-			/// @returns true if the ddi and element numbers of the provided objects match, otherwise false
-			bool operator==(const ProcessDataCallbackInfo &obj) const;
-			std::int32_t processDataValue; ///< The value of the value set command
-			std::int32_t lastValue; ///< Used for measurement commands to store timestamp or previous values
-			std::uint16_t elementNumber; ///< The element number for the command
-			std::uint16_t ddi; ///< The DDI for the command
-			bool ackRequested; ///< Stores if the TC used the mux that also requires a PDACK
-			bool thresholdPassed; ///< Used when the structure is being used to track measurement command thresholds to know if the threshold has been passed
+			/// @returns true if the callback and parent pointer match, otherwise false
+			bool operator==(const DefaultProcessDataRequestCallbackInfo &obj) const;
+			DefaultProcessDataRequestedCallback callback; ///< The callback itself
+			void *parent; ///< The parent pointer, generic context value
 		};
 
-		/// @brief Stores a TC value command callback along with its parent pointer
+		/// @brief Stores a TC request value command callback along with its parent pointer
 		struct RequestValueCommandCallbackInfo
 		{
 			/// @brief Allows easy comparison of callback data
@@ -620,10 +708,12 @@ namespace isobus
 		std::uint8_t const *userSuppliedBinaryDDOP = nullptr; ///< Stores a client-provided DDOP if one was provided
 		std::shared_ptr<std::vector<std::uint8_t>> userSuppliedVectorDDOP; ///< Stores a client-provided DDOP if one was provided
 		std::vector<std::uint8_t> generatedBinaryDDOP; ///< Stores the DDOP in binary form after it has been generated
+		std::vector<DefaultProcessDataRequestCallbackInfo> defaultProcessDataRequestedCallbacks; ///< A list of callbacks that will be called when the TC requests a process data value
 		std::vector<RequestValueCommandCallbackInfo> requestValueCallbacks; ///< A list of callbacks that will be called when the TC requests a process data value
 		std::vector<ValueCommandCallbackInfo> valueCommandsCallbacks; ///< A list of callbacks that will be called when the TC sets a process data value
 		std::list<ProcessDataCallbackInfo> queuedValueRequests; ///< A list of queued value requests that will be processed on the next update
 		std::list<ProcessDataCallbackInfo> queuedValueCommands; ///< A list of queued value commands that will be processed on the next update
+		std::list<ProcessDataCallbackInfo> measurementDistanceIntervalCommands; ///< A list of measurement commands that will be processed on a distance interval
 		std::list<ProcessDataCallbackInfo> measurementTimeIntervalCommands; ///< A list of measurement commands that will be processed on a time interval
 		std::list<ProcessDataCallbackInfo> measurementMinimumThresholdCommands; ///< A list of measurement commands that will be processed when the value drops below a threshold
 		std::list<ProcessDataCallbackInfo> measurementMaximumThresholdCommands; ///< A list of measurement commands that will be processed when the value above a threshold
@@ -642,6 +732,7 @@ namespace isobus
 		std::uint32_t serverStatusMessageTimestamp_ms = 0; ///< Timestamp corresponding to the last time we received a status message from the TC
 		std::uint32_t userSuppliedBinaryDDOPSize_bytes = 0; ///< The number of bytes in the user provided binary DDOP (if one was provided)
 		std::uint32_t languageCommandWaitingTimestamp_ms = 0; ///< Timestamp used to determine when to give up on waiting for a language command response
+		std::uint32_t totalMachineDistance = 0; ///< The total distance the machine has traveled since the application started. Used for distance interval triggers.
 		std::uint8_t numberOfWorkingSetMembers = 1; ///< The number of working set members that will be reported in the working set master message
 		std::uint8_t tcStatusBitfield = 0; ///< The last received TC/DL status from the status message
 		std::uint8_t sourceAddressOfCommandBeingExecuted = 0; ///< Source address of client for which the current command is being executed
@@ -665,6 +756,7 @@ namespace isobus
 		bool supportsPeerControlAssignment = false; ///< Determines if the client reports peer control assignment capability to the TC
 		bool supportsImplementSectionControl = false; ///< Determines if the client reports implement section control capability to the TC
 		bool shouldReuploadAfterDDOPDeletion = false; ///< Used to determine how the state machine should progress when updating a DDOP
+		bool shouldProcessAllDefaultProcessDataRequests = false; ///< Determines if the client should process all default process data requests. Used to offload from the CAN stack's thread if possible.
 	};
 } // namespace isobus
 
