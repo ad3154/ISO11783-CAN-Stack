@@ -236,6 +236,10 @@ namespace isobus
 					set_value_from_property(retVal.yOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetY);
 					set_value_from_property(retVal.zOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetZ);
 					set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::ActualWorkingWidth);
+					if (!retVal.width_mm.exists())
+					{
+						set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::MaximumWorkingWidth);
+					}
 				}
 				else if (task_controller_object::ObjectTypes::DeviceProcessData == sectionChildObject->get_object_type())
 				{
@@ -244,6 +248,10 @@ namespace isobus
 					set_editable_from_process_data(retVal.yOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetY);
 					set_editable_from_process_data(retVal.zOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetZ);
 					set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::ActualWorkingWidth);
+					if (!retVal.width_mm.exists())
+					{
+						set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::MaximumWorkingWidth);
+					}
 				}
 				else if ((task_controller_object::ObjectTypes::DeviceElement == sectionChildObject->get_object_type()) &&
 				         (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(sectionChildObject)->get_type()))
@@ -296,6 +304,10 @@ namespace isobus
 					set_value_from_property(retVal.yOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetY);
 					set_value_from_property(retVal.zOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetZ);
 					set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::ActualWorkingWidth);
+					if (!retVal.width_mm.exists())
+					{
+						set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::MaximumWorkingWidth);
+					}
 				}
 				else if (task_controller_object::ObjectTypes::DeviceProcessData == childObject->get_object_type())
 				{
@@ -304,6 +316,10 @@ namespace isobus
 					set_editable_from_process_data(retVal.yOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetY);
 					set_editable_from_process_data(retVal.zOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetZ);
 					set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::ActualWorkingWidth);
+					if (!retVal.width_mm.exists())
+					{
+						set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::MaximumWorkingWidth);
+					}
 				}
 				else if ((task_controller_object::ObjectTypes::DeviceElement == childObject->get_object_type()) &&
 				         (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(childObject)->get_type()))
