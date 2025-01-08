@@ -178,28 +178,18 @@ namespace isobus
 			}
 
 			// Find child DDIs that we care about
-			for (std::uint16_t i = 0; i < elementObject->get_number_child_objects(); i++)
+			for (std::uint16_t childObjectId : elementObject->get_child_object_ids())
 			{
-				auto child = ddop.get_object_by_id(elementObject->get_child_object_id(i));
+				auto child = ddop.get_object_by_id(childObjectId);
 
 				if (nullptr != child)
 				{
-					if (task_controller_object::ObjectTypes::DeviceProperty == child->get_object_type())
-					{
-						auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(child);
-						set_value_from_property(boomToPopulate.xOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetX);
-						set_value_from_property(boomToPopulate.yOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetY);
-						set_value_from_property(boomToPopulate.zOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetZ);
-					}
-					else if (task_controller_object::ObjectTypes::DeviceProcessData == child->get_object_type())
-					{
-						auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(child);
-						set_editable_from_process_data(boomToPopulate.xOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetX);
-						set_editable_from_process_data(boomToPopulate.yOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetY);
-						set_editable_from_process_data(boomToPopulate.zOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetZ);
-					}
-					else if ((task_controller_object::ObjectTypes::DeviceElement == child->get_object_type()) &&
-					         (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(child)->get_type()))
+					set_value_and_editable_from_object(boomToPopulate.xOffset_mm, child, DataDescriptionIndex::DeviceElementOffsetX);
+					set_value_and_editable_from_object(boomToPopulate.yOffset_mm, child, DataDescriptionIndex::DeviceElementOffsetY);
+					set_value_and_editable_from_object(boomToPopulate.zOffset_mm, child, DataDescriptionIndex::DeviceElementOffsetZ);
+
+					if ((task_controller_object::ObjectTypes::DeviceElement == child->get_object_type()) &&
+					    (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(child)->get_type()))
 					{
 						auto binInfo = parse_bin(ddop, std::static_pointer_cast<task_controller_object::DeviceElementObject>(child));
 
@@ -223,38 +213,27 @@ namespace isobus
 	{
 		Section retVal;
 
-		for (std::uint16_t i = 0; i < elementObject->get_number_child_objects(); i++)
+		for (std::uint16_t childObjectId : elementObject->get_child_object_ids())
 		{
-			auto sectionChildObject = ddop.get_object_by_id(elementObject->get_child_object_id(i));
+			auto sectionChildObject = ddop.get_object_by_id(childObjectId);
 
 			if (nullptr != sectionChildObject)
 			{
-				if (task_controller_object::ObjectTypes::DeviceProperty == sectionChildObject->get_object_type())
+				set_value_and_editable_from_object(retVal.xOffset_mm, sectionChildObject, DataDescriptionIndex::DeviceElementOffsetX);
+				set_value_and_editable_from_object(retVal.yOffset_mm, sectionChildObject, DataDescriptionIndex::DeviceElementOffsetY);
+				set_value_and_editable_from_object(retVal.zOffset_mm, sectionChildObject, DataDescriptionIndex::DeviceElementOffsetZ);
+				set_value_and_editable_from_object(retVal.width_mm, sectionChildObject, DataDescriptionIndex::ActualWorkingWidth);
+				if (!retVal.width_mm.exists())
 				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(sectionChildObject);
-					set_value_from_property(retVal.xOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetX);
-					set_value_from_property(retVal.yOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetY);
-					set_value_from_property(retVal.zOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetZ);
-					set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::ActualWorkingWidth);
-					if (!retVal.width_mm.exists())
-					{
-						set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::MaximumWorkingWidth);
-					}
+					set_value_and_editable_from_object(retVal.width_mm, sectionChildObject, DataDescriptionIndex::MaximumWorkingWidth);
 				}
-				else if (task_controller_object::ObjectTypes::DeviceProcessData == sectionChildObject->get_object_type())
+				if (!retVal.width_mm.exists())
 				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(sectionChildObject);
-					set_editable_from_process_data(retVal.xOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetX);
-					set_editable_from_process_data(retVal.yOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetY);
-					set_editable_from_process_data(retVal.zOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetZ);
-					set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::ActualWorkingWidth);
-					if (!retVal.width_mm.exists())
-					{
-						set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::MaximumWorkingWidth);
-					}
+					set_value_and_editable_from_object(retVal.width_mm, sectionChildObject, DataDescriptionIndex::DefaultWorkingWidth);
 				}
-				else if ((task_controller_object::ObjectTypes::DeviceElement == sectionChildObject->get_object_type()) &&
-				         (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(sectionChildObject)->get_type()))
+
+				if ((task_controller_object::ObjectTypes::DeviceElement == sectionChildObject->get_object_type()) &&
+				    (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(sectionChildObject)->get_type()))
 				{
 					auto binInfo = parse_bin(ddop, std::static_pointer_cast<task_controller_object::DeviceElementObject>(sectionChildObject));
 
@@ -291,38 +270,27 @@ namespace isobus
 		}
 
 		// Process child DDIs of this sub boom to locate offset and width
-		for (std::uint16_t i = 0; i < elementObject->get_number_child_objects(); i++)
+		for (std::uint16_t childObjectId : elementObject->get_child_object_ids())
 		{
-			auto childObject = ddop.get_object_by_id(elementObject->get_child_object_id(i));
+			auto childObject = ddop.get_object_by_id(childObjectId);
 
 			if (nullptr != childObject)
 			{
-				if (task_controller_object::ObjectTypes::DeviceProperty == childObject->get_object_type())
+				set_value_and_editable_from_object(retVal.xOffset_mm, childObject, DataDescriptionIndex::DeviceElementOffsetX);
+				set_value_and_editable_from_object(retVal.yOffset_mm, childObject, DataDescriptionIndex::DeviceElementOffsetY);
+				set_value_and_editable_from_object(retVal.zOffset_mm, childObject, DataDescriptionIndex::DeviceElementOffsetZ);
+				set_value_and_editable_from_object(retVal.width_mm, childObject, DataDescriptionIndex::ActualWorkingWidth);
+				if (!retVal.width_mm.exists())
 				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(childObject);
-					set_value_from_property(retVal.xOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetX);
-					set_value_from_property(retVal.yOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetY);
-					set_value_from_property(retVal.zOffset_mm, property, DataDescriptionIndex::DeviceElementOffsetZ);
-					set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::ActualWorkingWidth);
-					if (!retVal.width_mm.exists())
-					{
-						set_value_from_property(retVal.width_mm, property, DataDescriptionIndex::MaximumWorkingWidth);
-					}
+					set_value_and_editable_from_object(retVal.width_mm, childObject, DataDescriptionIndex::MaximumWorkingWidth);
 				}
-				else if (task_controller_object::ObjectTypes::DeviceProcessData == childObject->get_object_type())
+				if (!retVal.width_mm.exists())
 				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(childObject);
-					set_editable_from_process_data(retVal.xOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetX);
-					set_editable_from_process_data(retVal.yOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetY);
-					set_editable_from_process_data(retVal.zOffset_mm, processData, DataDescriptionIndex::DeviceElementOffsetZ);
-					set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::ActualWorkingWidth);
-					if (!retVal.width_mm.exists())
-					{
-						set_editable_from_process_data(retVal.width_mm, processData, DataDescriptionIndex::MaximumWorkingWidth);
-					}
+					set_value_and_editable_from_object(retVal.width_mm, childObject, DataDescriptionIndex::DefaultWorkingWidth);
 				}
-				else if ((task_controller_object::ObjectTypes::DeviceElement == childObject->get_object_type()) &&
-				         (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(childObject)->get_type()))
+
+				if ((task_controller_object::ObjectTypes::DeviceElement == childObject->get_object_type()) &&
+				    (task_controller_object::DeviceElementObject::Type::Bin == std::static_pointer_cast<task_controller_object::DeviceElementObject>(childObject)->get_type()))
 				{
 					auto binInfo = parse_bin(ddop, std::static_pointer_cast<task_controller_object::DeviceElementObject>(childObject));
 
@@ -346,9 +314,9 @@ namespace isobus
 		if (task_controller_object::DeviceElementObject::Type::Bin == elementObject->get_type())
 		{
 			retVal.elementNumber = elementObject->get_element_number();
-			for (std::uint16_t i = 0; i < elementObject->get_number_child_objects(); i++)
+			for (std::uint16_t childObjectId : elementObject->get_child_object_ids())
 			{
-				auto object = ddop.get_object_by_id(elementObject->get_child_object_id(i));
+				auto object = ddop.get_object_by_id(childObjectId);
 
 				if (nullptr != object)
 				{
@@ -376,24 +344,55 @@ namespace isobus
 		return retVal;
 	}
 
-	void DeviceDescriptorObjectPoolHelper::set_value_from_property(ObjectPoolValue &objectPoolValue,
-	                                                               const std::shared_ptr<task_controller_object::DevicePropertyObject> &property,
-	                                                               DataDescriptionIndex ddi)
+	void DeviceDescriptorObjectPoolHelper::set_value_and_editable_from_object(ObjectPoolValue &objectPoolValue,
+	                                                                          const std::shared_ptr<task_controller_object::Object> &object,
+	                                                                          DataDescriptionIndex ddi)
 	{
-		if (property->get_ddi() == static_cast<std::uint16_t>(ddi))
+		if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
 		{
-			objectPoolValue.value = property->get_value();
-			objectPoolValue.isValuePresent = true;
+			auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
+			if (processData->get_ddi() == static_cast<std::uint16_t>(ddi))
+			{
+				objectPoolValue.isSettable = processData->has_property(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable);
+			}
+		}
+		else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
+		{
+			auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
+			if (property->get_ddi() == static_cast<std::uint16_t>(ddi))
+			{
+				objectPoolValue.value = property->get_value();
+				objectPoolValue.isValuePresent = true;
+			}
 		}
 	}
 
-	void DeviceDescriptorObjectPoolHelper::set_editable_from_process_data(ObjectPoolValue &objectPoolValue,
-	                                                                      const std::shared_ptr<task_controller_object::DeviceProcessDataObject> &processData,
-	                                                                      DataDescriptionIndex ddi)
+	void DeviceDescriptorObjectPoolHelper::set_product_control_information_rate(RateMetadata &rate,
+	                                                                            const std::shared_ptr<task_controller_object::Object> &object,
+	                                                                            std::uint16_t ddi)
 	{
-		if (processData->get_ddi() == static_cast<std::uint16_t>(ddi))
+		if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
 		{
-			objectPoolValue.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
+			auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
+
+			if (ddi == processData->get_ddi())
+			{
+				rate.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
+				rate.objectID = processData->get_object_id();
+				rate.dataDictionaryIdentifier = processData->get_ddi();
+			}
+		}
+		else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
+		{
+			auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
+
+			if (ddi == property->get_ddi())
+			{
+				rate.objectID = property->get_object_id();
+				rate.isValuePresent = true;
+				rate.value = property->get_value();
+				rate.dataDictionaryIdentifier = property->get_ddi();
+			}
 		}
 	}
 
@@ -420,29 +419,7 @@ namespace isobus
 			case static_cast<std::uint16_t>(DataDescriptionIndex::MaximumSpacingApplicationRate):
 			case static_cast<std::uint16_t>(DataDescriptionIndex::MaximumRevolutionsPerTime):
 			{
-				if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
-				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
-
-					if (ddi == processData->get_ddi())
-					{
-						productControlInformation.rateMaximum.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
-						productControlInformation.rateMaximum.objectID = processData->get_object_id();
-						productControlInformation.rateMaximum.dataDictionaryIdentifier = processData->get_ddi();
-					}
-				}
-				else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
-				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
-
-					if (ddi == property->get_ddi())
-					{
-						productControlInformation.rateMaximum.objectID = property->get_object_id();
-						productControlInformation.rateMaximum.isValuePresent = true;
-						productControlInformation.rateMaximum.value = property->get_value();
-						productControlInformation.rateMaximum.dataDictionaryIdentifier = property->get_ddi();
-					}
-				}
+				set_product_control_information_rate(productControlInformation.rateMaximum, object, ddi);
 			}
 			break;
 
@@ -474,29 +451,7 @@ namespace isobus
 			case static_cast<std::uint16_t>(DataDescriptionIndex::MinimumSpacingApplicationRate):
 			case static_cast<std::uint16_t>(DataDescriptionIndex::MinimumRevolutionsPerTime):
 			{
-				if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
-				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
-
-					if (ddi == processData->get_ddi())
-					{
-						productControlInformation.rateMinimum.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
-						productControlInformation.rateMinimum.objectID = processData->get_object_id();
-						productControlInformation.rateMinimum.dataDictionaryIdentifier = processData->get_ddi();
-					}
-				}
-				else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
-				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
-
-					if (ddi == property->get_ddi())
-					{
-						productControlInformation.rateMinimum.objectID = property->get_object_id();
-						productControlInformation.rateMinimum.isValuePresent = true;
-						productControlInformation.rateMinimum.value = property->get_value();
-						productControlInformation.rateMinimum.dataDictionaryIdentifier = property->get_ddi();
-					}
-				}
+				set_product_control_information_rate(productControlInformation.rateMinimum, object, ddi);
 			}
 			break;
 
@@ -523,29 +478,7 @@ namespace isobus
 			case static_cast<std::uint16_t>(DataDescriptionIndex::DefaultVolumePerTimeApplicationRate):
 			case static_cast<std::uint16_t>(DataDescriptionIndex::DefaultSpacingApplicationRate):
 			{
-				if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
-				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
-
-					if (ddi == processData->get_ddi())
-					{
-						productControlInformation.rateDefault.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
-						productControlInformation.rateDefault.objectID = processData->get_object_id();
-						productControlInformation.rateDefault.dataDictionaryIdentifier = processData->get_ddi();
-					}
-				}
-				else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
-				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
-
-					if (ddi == property->get_ddi())
-					{
-						productControlInformation.rateDefault.objectID = property->get_object_id();
-						productControlInformation.rateDefault.isValuePresent = true;
-						productControlInformation.rateDefault.value = property->get_value();
-						productControlInformation.rateDefault.dataDictionaryIdentifier = property->get_ddi();
-					}
-				}
+				set_product_control_information_rate(productControlInformation.rateDefault, object, ddi);
 			}
 			break;
 
@@ -577,29 +510,7 @@ namespace isobus
 			case static_cast<std::uint16_t>(DataDescriptionIndex::SetpointSpacingApplicationRate):
 			case static_cast<std::uint16_t>(DataDescriptionIndex::SetpointRevolutionsSpecifiedAsCountPerTime):
 			{
-				if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
-				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
-
-					if (ddi == processData->get_ddi())
-					{
-						productControlInformation.rateSetpoint.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
-						productControlInformation.rateSetpoint.objectID = processData->get_object_id();
-						productControlInformation.rateSetpoint.dataDictionaryIdentifier = processData->get_ddi();
-					}
-				}
-				else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
-				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
-
-					if (ddi == property->get_ddi())
-					{
-						productControlInformation.rateSetpoint.objectID = property->get_object_id();
-						productControlInformation.rateSetpoint.isValuePresent = true;
-						productControlInformation.rateSetpoint.value = property->get_value();
-						productControlInformation.rateSetpoint.dataDictionaryIdentifier = property->get_ddi();
-					}
-				}
+				set_product_control_information_rate(productControlInformation.rateSetpoint, object, ddi);
 			}
 			break;
 
@@ -631,29 +542,7 @@ namespace isobus
 			case static_cast<std::uint16_t>(DataDescriptionIndex::ActualSpacingApplicationRate):
 			case static_cast<std::uint16_t>(DataDescriptionIndex::ActualRevolutionsPerTime):
 			{
-				if (task_controller_object::ObjectTypes::DeviceProcessData == object->get_object_type())
-				{
-					auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(object);
-
-					if (ddi == processData->get_ddi())
-					{
-						productControlInformation.rateActual.isSettable = (0 != (static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::PropertiesBit::Settable) & processData->get_properties_bitfield()));
-						productControlInformation.rateActual.objectID = processData->get_object_id();
-						productControlInformation.rateActual.dataDictionaryIdentifier = processData->get_ddi();
-					}
-				}
-				else if (task_controller_object::ObjectTypes::DeviceProperty == object->get_object_type())
-				{
-					auto property = std::static_pointer_cast<task_controller_object::DevicePropertyObject>(object);
-
-					if (ddi == property->get_ddi())
-					{
-						productControlInformation.rateActual.objectID = property->get_object_id();
-						productControlInformation.rateActual.isValuePresent = true;
-						productControlInformation.rateActual.value = property->get_value();
-						productControlInformation.rateActual.dataDictionaryIdentifier = property->get_ddi();
-					}
-				}
+				set_product_control_information_rate(productControlInformation.rateActual, object, ddi);
 			}
 			break;
 

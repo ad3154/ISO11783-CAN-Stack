@@ -319,6 +319,11 @@ namespace isobus
 			return retVal;
 		}
 
+		DataSpan<const std::uint16_t> DeviceElementObject::get_child_object_ids() const
+		{
+			return DataSpan<const std::uint16_t>(referenceList.data(), referenceList.size());
+		}
+
 		std::uint16_t DeviceElementObject::get_number_child_objects() const
 		{
 			return static_cast<std::uint16_t>(referenceList.size());
@@ -414,6 +419,11 @@ namespace isobus
 		void DeviceProcessDataObject::set_properties_bitfield(std::uint8_t properties)
 		{
 			propertiesBitfield = properties;
+		}
+
+		bool DeviceProcessDataObject::has_property(DeviceProcessDataObject::PropertiesBit property)
+		{
+			return (0 != (propertiesBitfield & static_cast<std::uint8_t>(property)));
 		}
 
 		std::uint8_t DeviceProcessDataObject::get_trigger_methods_bitfield() const
