@@ -260,11 +260,11 @@ namespace isobus
 		/// @brief Sends a time interval measurement command.
 		/// The process data value for this command is the time interval for sending the data element
 		/// specified by the data dictionary identifier.The client has to send the value of this data
-		/// element to the TC or DL cyclic with this time interval.
+		/// element to the TC or DL cyclic with this time interval in milliseconds.
 		/// @param[in] clientControlFunction The control function to send the message to
 		/// @param[in] dataDescriptionIndex The data description index of the data element to send the command for
 		/// @param[in] elementNumber The element number of the data element to send the command for
-		/// @param[in] timeInterval The time interval for sending the data element specified by the data dictionary identifier.
+		/// @param[in] timeInterval The time interval in milliseconds for sending the data element specified by the data dictionary identifier.
 		/// @returns true if the message was sent, otherwise false
 		bool send_time_interval_measurement_command(std::shared_ptr<ControlFunction> clientControlFunction, std::uint16_t dataDescriptionIndex, std::uint16_t elementNumber, std::uint32_t timeInterval) const;
 

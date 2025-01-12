@@ -387,6 +387,11 @@ namespace isobus
 			/// @param[in] methods The new trigger methods bitfield to set
 			void set_trigger_methods_bitfield(std::uint8_t methods);
 
+			/// @brief Tests whether a trigger method is set in the trigger methods bitfield
+			/// @param method The trigger method to test for
+			/// @returns `true` if the trigger method is set, otherwise `false`
+			bool has_trigger_method(DeviceProcessDataObject::AvailableTriggerMethods method);
+
 		private:
 			static const std::string tableID; ///< XML element namespace for DeviceProcessData.
 			std::uint16_t ddi; ///< Identifier of process data variable

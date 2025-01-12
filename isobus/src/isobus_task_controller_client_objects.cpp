@@ -436,6 +436,11 @@ namespace isobus
 			triggerMethodsBitfield = methods;
 		}
 
+		bool DeviceProcessDataObject::has_trigger_method(DeviceProcessDataObject::AvailableTriggerMethods method)
+		{
+			return (0 != (triggerMethodsBitfield & static_cast<std::uint8_t>(method)));
+		}
+
 		const std::string DevicePropertyObject::tableID = "DPT";
 
 		DevicePropertyObject::DevicePropertyObject(std::string propertyDesignator,
