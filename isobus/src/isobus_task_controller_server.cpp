@@ -13,6 +13,7 @@
 #include "isobus/isobus/can_general_parameter_group_numbers.hpp"
 #include "isobus/isobus/can_network_manager.hpp"
 #include "isobus/isobus/can_stack_logger.hpp"
+#include "isobus/isobus/isobus_data_dictionary.hpp"
 #include "isobus/utility/system_timing.hpp"
 
 #include <cassert>
@@ -163,7 +164,7 @@ namespace isobus
 			                                   constexpr std::uint32_t CLIENT_TASK_TIMEOUT_MS = 6000;
 			                                   if (SystemTiming::time_expired_ms(clientInfo->lastStatusMessageTimestamp_ms, CLIENT_TASK_TIMEOUT_MS))
 			                                   {
-				                                   LOG_WARNING("[TC Server]: Client 0x%02X has timed out. Removing from active client list.", clientInfo->clientControlFunction->get_address());
+				                                   LOG_WARNING("[TC Server]: Client %hhu has timed out. Removing from active client list.", clientInfo->clientControlFunction->get_address());
 				                                   return true;
 			                                   }
 			                                   return false;
@@ -294,13 +295,13 @@ namespace isobus
 
 												if (get_is_stored_device_descriptor_object_pool_by_structure_label(rxMessage.get_source_control_function(), structureLabel, extendedStructureLabel))
 												{
-													LOG_INFO("[TC Server]:Client 0x%02X structure label(s) matched.", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]:Client %hhu structure label(s) matched.", rxMessage.get_source_control_function()->get_address());
 													send_structure_label(rxMessage.get_source_control_function(), structureLabel, extendedStructureLabel);
 												}
 												else
 												{
 													// No object pool found. Send FFs as the structure label.
-													LOG_INFO("[TC Server]:Client 0x%02X structure label(s) did not match. Sending 0xFFs as the structure label.", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]:Client %hhu structure label(s) did not match. Sending 0xFFs as the structure label.", rxMessage.get_source_control_function()->get_address());
 													send_generic_process_data_default_payload((static_cast<std::uint8_t>(ProcessDataCommands::DeviceDescriptor) | (static_cast<std::uint8_t>(DeviceDescriptorCommandParameters::StructureLabel) << 4)), rxMessage.get_source_control_function());
 												}
 											}
@@ -318,13 +319,13 @@ namespace isobus
 												const std::array<std::uint8_t, 7> localizationLabel = { rxData.at(1), rxData.at(2), rxData.at(3), rxData.at(4), rxData.at(5), rxData.at(6), rxData.at(7) };
 												if (get_is_stored_device_descriptor_object_pool_by_localization_label(rxMessage.get_source_control_function(), localizationLabel))
 												{
-													LOG_INFO("[TC Server]:Client 0x%02X localization label matched.", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]:Client %hhu localization label matched.", rxMessage.get_source_control_function()->get_address());
 													send_localization_label(rxMessage.get_source_control_function(), localizationLabel);
 												}
 												else
 												{
 													// No object pool found. Send FFs as the localization label.
-													LOG_INFO("[TC Server]: No object pool found for client 0x%02X localization label. Sending FFs as the localization label.", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]: No object pool found for client %hhu localization label. Sending FFs as the localization label.", rxMessage.get_source_control_function()->get_address());
 													send_generic_process_data_default_payload(static_cast<std::uint8_t>(ProcessDataCommands::DeviceDescriptor) | static_cast<std::uint8_t>(DeviceDescriptorCommandParameters::LocalizationLabel) << 4, rxMessage.get_source_control_function());
 												}
 											}
@@ -344,14 +345,14 @@ namespace isobus
 												if ((requestedSize <= CANMessage::ABSOLUTE_MAX_MESSAGE_LENGTH) &&
 												    (get_is_enough_memory_available(requestedSize)))
 												{
-													LOG_INFO("[TC Server]: Client 0x%02X requests object pool transfer of %u bytes", rxMessage.get_source_control_function()->get_address(), requestedSize);
+													LOG_INFO("[TC Server]: Client %hhu requests object pool transfer of %u bytes", rxMessage.get_source_control_function()->get_address(), requestedSize);
 
 													get_active_client(rxMessage.get_source_control_function())->clientDDOPsize_bytes = requestedSize;
 													send_request_object_pool_transfer_response(rxMessage.get_source_control_function(), true);
 												}
 												else
 												{
-													LOG_ERROR("[TC Server]: Client 0x%02X requests object pool transfer of %u bytes but there is not enough memory available.", rxMessage.get_source_control_function()->get_address(), requestedSize);
+													LOG_ERROR("[TC Server]: Client %hhu requests object pool transfer of %u bytes but there is not enough memory available.", rxMessage.get_source_control_function()->get_address(), requestedSize);
 													send_request_object_pool_transfer_response(rxMessage.get_source_control_function(), false);
 												}
 											}
@@ -371,17 +372,17 @@ namespace isobus
 
 												if (0 == get_active_client(rxMessage.get_source_control_function())->clientDDOPsize_bytes)
 												{
-													LOG_WARNING("[TC Server]: Client 0x%02X sent object pool transfer without first requesting a transfer!", rxMessage.get_source_control_function()->get_address());
+													LOG_WARNING("[TC Server]: Client %hhu sent object pool transfer without first requesting a transfer!", rxMessage.get_source_control_function()->get_address());
 												}
 
 												if (store_device_descriptor_object_pool(rxMessage.get_source_control_function(), objectPool, 0 != get_active_client(rxMessage.get_source_control_function())->numberOfObjectPoolSegments))
 												{
-													LOG_INFO("[TC Server]: Stored DDOP segment for client 0x%02X", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]: Stored DDOP segment for client %hhu", rxMessage.get_source_control_function()->get_address());
 													send_object_pool_transfer_response(rxMessage.get_source_control_function(), 0, static_cast<std::uint32_t>(objectPool.size())); // No error, transfer OK
 												}
 												else
 												{
-													LOG_ERROR("[TC Server]: Failed to store DDOP segment for client 0x%02X. Reporting to the client as \"Any other error\"", rxMessage.get_source_control_function()->get_address());
+													LOG_ERROR("[TC Server]: Failed to store DDOP segment for client %hhu. Reporting to the client as \"Any other error\"", rxMessage.get_source_control_function()->get_address());
 													send_object_pool_transfer_response(rxMessage.get_source_control_function(), 2, static_cast<std::uint32_t>(objectPool.size()));
 												}
 											}
@@ -405,40 +406,40 @@ namespace isobus
 
 												if (ACTIVATE == rxData[1])
 												{
-													LOG_INFO("[TC Server]: Client 0x%02X requests activation of object pool", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]: Client %hhu requests activation of object pool", rxMessage.get_source_control_function()->get_address());
 													auto client = get_active_client(rxMessage.get_source_control_function());
 
 													if (activate_object_pool(rxMessage.get_source_control_function(), activationError, errorCode, faultingParentObject, faultingObject))
 													{
-														LOG_INFO("[TC Server]: Object pool activated for client 0x%02X", rxMessage.get_source_control_function()->get_address());
+														LOG_INFO("[TC Server]: Object pool activated for client %hhu", rxMessage.get_source_control_function()->get_address());
 														client->isDDOPActive = true;
 														send_object_pool_activate_deactivate_response(rxMessage.get_source_control_function(), 0, 0, 0xFFFF, 0xFFFF);
 													}
 													else
 													{
-														LOG_ERROR("[TC Server]: Failed to activate object pool for client 0x%02X. Error code: %u, Faulty object: %u, Parent of faulty object: %u", rxMessage.get_source_control_function()->get_address(), static_cast<std::uint8_t>(activationError), faultingObject, faultingParentObject);
+														LOG_ERROR("[TC Server]: Failed to activate object pool for client %hhu. Error code: %u, Faulty object: %u, Parent of faulty object: %u", rxMessage.get_source_control_function()->get_address(), static_cast<std::uint8_t>(activationError), faultingObject, faultingParentObject);
 														send_object_pool_activate_deactivate_response(rxMessage.get_source_control_function(), static_cast<std::uint8_t>(activationError), static_cast<std::uint8_t>(errorCode), faultingParentObject, faultingObject);
 													}
 												}
 												else if (DEACTIVATE == rxData[1])
 												{
-													LOG_INFO("[TC Server]: Client 0x%02X requests deactivation of object pool", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]: Client %hhu requests deactivation of object pool", rxMessage.get_source_control_function()->get_address());
 
 													if (deactivate_object_pool(rxMessage.get_source_control_function()))
 													{
-														LOG_INFO("[TC Server]: Object pool deactivated for client 0x%02X", rxMessage.get_source_control_function()->get_address());
+														LOG_INFO("[TC Server]: Object pool deactivated for client %hhu", rxMessage.get_source_control_function()->get_address());
 														get_active_client(rxMessage.get_source_control_function())->isDDOPActive = false;
 														send_object_pool_activate_deactivate_response(rxMessage.get_source_control_function(), 0, 0, 0xFFFF, 0xFFFF);
 													}
 													else
 													{
-														LOG_ERROR("[TC Server]: Failed to deactivate object pool for client 0x%02X", rxMessage.get_source_control_function()->get_address());
+														LOG_ERROR("[TC Server]: Failed to deactivate object pool for client %hhu", rxMessage.get_source_control_function()->get_address());
 														send_object_pool_activate_deactivate_response(rxMessage.get_source_control_function(), static_cast<std::uint8_t>(ObjectPoolActivationError::AnyOtherError), 0, 0xFFFF, 0xFFFF);
 													}
 												}
 												else
 												{
-													LOG_ERROR("[TC Server]: Client 0x%02X requests activation/deactivation of object pool with invalid value: 0x%02X", rxMessage.get_source_control_function()->get_address(), rxData[1]);
+													LOG_ERROR("[TC Server]: Client %hhu requests activation/deactivation of object pool with invalid value: 0x%02X", rxMessage.get_source_control_function()->get_address(), rxData[1]);
 												}
 											}
 											else
@@ -456,12 +457,12 @@ namespace isobus
 
 												if (delete_device_descriptor_object_pool(rxMessage.get_source_control_function(), errorCode))
 												{
-													LOG_INFO("[TC Server]: Deleted object pool for client 0x%02X", rxMessage.get_source_control_function()->get_address());
+													LOG_INFO("[TC Server]: Deleted object pool for client %hhu", rxMessage.get_source_control_function()->get_address());
 													send_delete_object_pool_response(rxMessage.get_source_control_function(), true, static_cast<std::uint8_t>(ObjectPoolDeletionErrors::ErrorDetailsNotAvailable));
 												}
 												else
 												{
-													LOG_ERROR("[TC Server]: Failed to delete object pool for client 0x%02X. Error code: %u", rxMessage.get_source_control_function()->get_address(), static_cast<std::uint8_t>(errorCode));
+													LOG_ERROR("[TC Server]: Failed to delete object pool for client %hhu. Error code: %u", rxMessage.get_source_control_function()->get_address(), static_cast<std::uint8_t>(errorCode));
 													send_delete_object_pool_response(rxMessage.get_source_control_function(), false, static_cast<std::uint8_t>(errorCode));
 												}
 											}
@@ -488,18 +489,18 @@ namespace isobus
 
 													if (change_designator(rxMessage.get_source_control_function(), objectID, newDesignatorUTF8Bytes))
 													{
-														LOG_INFO("[TC Server]: Changed designator for client 0x%02X. Object ID: %u", rxMessage.get_source_control_function()->get_address(), objectID);
+														LOG_INFO("[TC Server]: Changed designator for client %hhu. Object ID: %u", rxMessage.get_source_control_function()->get_address(), objectID);
 														send_change_designator_response(rxMessage.get_source_control_function(), objectID, 0);
 													}
 													else
 													{
-														LOG_ERROR("[TC Server]: Failed to change designator for client 0x%02X. Object ID: %u", rxMessage.get_source_control_function()->get_address(), objectID);
+														LOG_ERROR("[TC Server]: Failed to change designator for client %hhu. Object ID: %u", rxMessage.get_source_control_function()->get_address(), objectID);
 														send_change_designator_response(rxMessage.get_source_control_function(), objectID, 1);
 													}
 												}
 												else
 												{
-													LOG_ERROR("[TC Server]: Client 0x%02X requests change to change a designator but the object pool is not active.", rxMessage.get_source_control_function()->get_address());
+													LOG_ERROR("[TC Server]: Client %hhu requests change to change a designator but the object pool is not active.", rxMessage.get_source_control_function()->get_address());
 												}
 											}
 											else
@@ -549,7 +550,7 @@ namespace isobus
 
 									if (on_value_command(rxMessage.get_source_control_function(), DDI, elementNumber, processVariableValue, errorCodes))
 									{
-										LOG_DEBUG("[TC Server]: Client 0x%02X value command for element %u DDI %u and value %d OK.", rxMessage.get_source_control_function()->get_address(), elementNumber, DDI, processVariableValue);
+										LOG_DEBUG("[TC Server]: Client %hhu value command for element %u DDI %s with value %s OK.", rxMessage.get_source_control_function()->get_address(), elementNumber, DataDictionary::ddi_to_string(DDI).c_str(), DataDictionary::format_value_with_ddi(DDI, processVariableValue).c_str());
 
 										if (ProcessDataCommands::SetValueAndAcknowledge == static_cast<ProcessDataCommands>(rxData[0] & 0x0F))
 										{
@@ -558,7 +559,7 @@ namespace isobus
 									}
 									else
 									{
-										LOG_ERROR("[TC Server]: Client 0x%02X value command for element %u DDI %u and value %d failed.", rxMessage.get_source_control_function()->get_address(), elementNumber, DDI, processVariableValue);
+										LOG_ERROR("[TC Server]: Client %hhu value command for element %u DDI %s with value %s failed.", rxMessage.get_source_control_function()->get_address(), elementNumber, DataDictionary::ddi_to_string(DDI).c_str(), DataDictionary::format_value_with_ddi(DDI, processVariableValue).c_str());
 
 										if (0 == errorCodes)
 										{
@@ -571,7 +572,7 @@ namespace isobus
 								}
 								else
 								{
-									LOG_ERROR("[TC Server]: Client 0x%02X sent a value command but the object pool is not active.", rxMessage.get_source_control_function()->get_address());
+									LOG_ERROR("[TC Server]: Client %hhu sent a value command but the object pool is not active.", rxMessage.get_source_control_function()->get_address());
 								}
 							}
 							else
@@ -594,7 +595,7 @@ namespace isobus
 								}
 								else
 								{
-									LOG_ERROR("[TC Server]: Client 0x%02X sent an acknowledge command but the object pool is not active.", rxMessage.get_source_control_function()->get_address());
+									LOG_ERROR("[TC Server]: Client %hhu sent an acknowledge command but the object pool is not active.", rxMessage.get_source_control_function()->get_address());
 									send_process_data_acknowledge(rxMessage.get_source_control_function(), DDI, elementNumber, static_cast<std::uint8_t>(ProcessDataAcknowledgeErrorCodes::ProcessDataNotSettable), static_cast<ProcessDataCommands>(rxData[0] & 0x0F));
 								}
 							}
@@ -615,12 +616,12 @@ namespace isobus
 							{
 								std::uint16_t DDI = static_cast<std::uint16_t>(rxData[2]) | (static_cast<std::uint16_t>(rxData[3]) << 8);
 								std::uint16_t elementNumber = static_cast<std::uint16_t>(rxData[0] >> 4) | (static_cast<std::uint16_t>(rxData[1]) << 4);
-								LOG_ERROR("[TC Server]: Client 0x%02X is sending measurement commands?", rxMessage.get_source_control_function()->get_address());
+								LOG_ERROR("[TC Server]: Client %hhu is sending measurement commands?", rxMessage.get_source_control_function()->get_address());
 								send_process_data_acknowledge(rxMessage.get_source_control_function(), DDI, elementNumber, static_cast<std::uint8_t>(ProcessDataAcknowledgeErrorCodes::ProcessDataCommandNotSupported), static_cast<ProcessDataCommands>(rxData[0] & 0x0F));
 							}
 							else
 							{
-								LOG_ERROR("[TC Server]: Client 0x%02X is sending measurement commands with invalid lengths, which is very unusual.", rxMessage.get_source_control_function()->get_address());
+								LOG_ERROR("[TC Server]: Client %hhu is sending measurement commands with invalid lengths, which is very unusual.", rxMessage.get_source_control_function()->get_address());
 							}
 						}
 						break;

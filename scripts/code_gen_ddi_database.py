@@ -68,26 +68,46 @@ with open("export.txt",'r', encoding="utf8") as f:
             for sub in entityLine:
                 strippedEntityLine.append(sub.replace("\n", ""))
             
-            print("Processing entity", line)
+            print("Processing entity", line.replace("\n", ""))
             resultingArray += f"		{{ {strippedEntityLine[2]}, \"{strippedEntityLine[3]}\", "
 
-        if "Unit:" in line and processUnit:
+        # Unit: mm³/m² - Capacity per area unit
+        if "Unit: " in line and processUnit:
             entityLine = line.split(' ', 1)
-            if "n.a. -" in entityLine[1]:
-                entityLine[1] = "None"
-            if "not defined - not defined" in entityLine[1]:
-                entityLine[1] = "None"
-            resultingArray += f"\"{entityLine[1].strip()}\", "
-            processUnit = False
+
+            try:
+                symbol, name = entityLine[1].split(' - ')
+                if "n.a" in symbol or "not defined" in symbol:
+                    symbol = ""
+                    name = "n.a."
+                    
+                resultingArray += f"\"{symbol.strip()}\", \"{name.strip()}\", "
+                processUnit = False
+            except ValueError:
+                print("Error parsing unit", line)
         
-        if "Resolution" in line:
+        if "Resolution: " in line:
             entityLine = line.split(' ', 1)
             entityLine[1] = entityLine[1].replace(",", ".")
             if '1' == entityLine[1].strip():
                 entityLine[1] = '1.0'
             if '0' == entityLine[1].strip():
                 entityLine[1] = '0.0'
-            resultingArray += f"{entityLine[1].strip()}f }},\n"
+            resultingArray += f"{entityLine[1].strip()}f, "
+            
+        # Display Range: 0,00 - 21474836,47
+        if "Display Range: " in line:
+            entityLine = line.split(' ', 2)
+            rangeValues = entityLine[2].split(' - ')
+            for i in range(2):
+                rangeValues[i] = rangeValues[i].replace("\n", "").replace(",", ".")
+                if '' == rangeValues[i].strip():
+                    rangeValues[i] = '0.0'
+                if rangeValues[i].count('0x') > 0:
+                    rangeValues[i] = str(int(rangeValues[i], 16))
+                if rangeValues[i].count('.') == 0:
+                    rangeValues[i] += '.0'
+            resultingArray += f"std::make_pair({rangeValues[0].strip()}f, {rangeValues[1].strip()}f) }},\n"
 
 resultingArray += "	}"
 
