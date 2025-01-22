@@ -216,6 +216,111 @@ bool SectionControlImplementSimulator::create_ddop(std::shared_ptr<isobus::Devic
 	return retVal;
 }
 
+bool SectionControlImplementSimulator::default_process_data_request_callback(std::uint16_t elementNumber,
+                                                                             std::uint16_t DDI,
+                                                                             isobus::TaskControllerClient::DefaultProcessDataSettings &returnedSettings,
+                                                                             void *parentPointer)
+{
+	bool retVal = false;
+
+	if (nullptr != parentPointer)
+	{
+		switch (elementNumber)
+		{
+			case static_cast<std::uint16_t>(ImplementDDOPElementNumbers::BinElement):
+			{
+				switch (DDI)
+				{
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::SetpointCountPerAreaApplicationRate):
+					{
+						returnedSettings.enableChangeThresholdTrigger = true;
+						returnedSettings.changeThreshold = 1;
+						retVal = true;
+					}
+					break;
+
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::MaximumCountContent):
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualCountContent):
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualCountPerAreaApplicationRate):
+					{
+						returnedSettings.enableChangeThresholdTrigger = true;
+						returnedSettings.enableTimeTrigger = true;
+						returnedSettings.changeThreshold = 1;
+						returnedSettings.timeTriggerInterval_ms = 1000;
+						retVal = true;
+					}
+					break;
+
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::PrescriptionControlState):
+					{
+						returnedSettings.enableChangeThresholdTrigger = true;
+						returnedSettings.enableTimeTrigger = true;
+						returnedSettings.changeThreshold = 1;
+						returnedSettings.timeTriggerInterval_ms = 5000;
+						retVal = true;
+					}
+					break;
+
+					default:
+					{
+					}
+					break;
+				}
+			}
+			break;
+
+			case static_cast<std::uint16_t>(ImplementDDOPElementNumbers::BoomElement):
+			{
+				switch (DDI)
+				{
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualWorkingWidth):
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::SetpointWorkState):
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualCondensedWorkState1_16):
+					{
+						returnedSettings.enableChangeThresholdTrigger = true;
+						returnedSettings.changeThreshold = 1;
+						retVal = true;
+					}
+					break;
+
+					case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::SectionControlState):
+					{
+						returnedSettings.enableChangeThresholdTrigger = true;
+						returnedSettings.enableTimeTrigger = true;
+						returnedSettings.changeThreshold = 1;
+						returnedSettings.timeTriggerInterval_ms = 1000;
+						retVal = true;
+					}
+					break;
+
+					default:
+					{
+					}
+					break;
+				}
+			}
+			break;
+
+			case static_cast<std::uint16_t>(ImplementDDOPElementNumbers::DeviceElement):
+			{
+				if (static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualWorkState) == DDI)
+				{
+					returnedSettings.enableChangeThresholdTrigger = true;
+					returnedSettings.changeThreshold = 1;
+					retVal = true;
+				}
+			}
+			break;
+
+			default:
+			{
+			}
+			break;
+		}
+	}
+	return retVal;
+}
+
 bool SectionControlImplementSimulator::request_value_command_callback(std::uint16_t,
                                                                       std::uint16_t DDI,
                                                                       std::int32_t &value,

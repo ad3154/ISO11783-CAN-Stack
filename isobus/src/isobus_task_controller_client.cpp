@@ -11,6 +11,7 @@
 #include "isobus/isobus/can_general_parameter_group_numbers.hpp"
 #include "isobus/isobus/can_network_manager.hpp"
 #include "isobus/isobus/can_stack_logger.hpp"
+#include "isobus/isobus/isobus_standard_data_description_indices.hpp"
 #include "isobus/utility/system_timing.hpp"
 #include "isobus/utility/to_string.hpp"
 
@@ -70,6 +71,14 @@ namespace isobus
 		}
 	}
 
+	void TaskControllerClient::add_default_process_data_requested_callback(DefaultProcessDataRequestedCallback callback, void *parentPointer)
+	{
+		LOCK_GUARD(Mutex, clientMutex);
+
+		DefaultProcessDataRequestCallbackInfo callbackData = { callback, parentPointer };
+		defaultProcessDataRequestedCallbacks.push_back(callbackData);
+	}
+
 	void TaskControllerClient::add_request_value_callback(RequestValueCommandCallback callback, void *parentPointer)
 	{
 		LOCK_GUARD(Mutex, clientMutex);
@@ -84,6 +93,19 @@ namespace isobus
 
 		ValueCommandCallbackInfo callbackData = { callback, parentPointer };
 		valueCommandsCallbacks.push_back(callbackData);
+	}
+
+	void TaskControllerClient::remove_default_process_data_requested_callback(DefaultProcessDataRequestedCallback callback, void *parentPointer)
+	{
+		LOCK_GUARD(Mutex, clientMutex);
+
+		DefaultProcessDataRequestCallbackInfo callbackData = { callback, parentPointer };
+		auto callbackLocation = std::find(defaultProcessDataRequestedCallbacks.begin(), defaultProcessDataRequestedCallbacks.end(), callbackData);
+
+		if (defaultProcessDataRequestedCallbacks.end() != callbackLocation)
+		{
+			defaultProcessDataRequestedCallbacks.erase(callbackLocation);
+		}
 	}
 
 	void TaskControllerClient::remove_request_value_callback(RequestValueCommandCallback callback, void *parentPointer)
@@ -396,8 +418,109 @@ namespace isobus
 		return retVal;
 	}
 
+	void TaskControllerClient::set_distance(std::uint32_t distance)
+	{
+		if (distance != totalMachineDistance)
+		{
+			LOCK_GUARD(Mutex, clientMutex);
+
+			totalMachineDistance = distance;
+
+			// Check all defined distance triggers to see if we need to send a value to the TC
+			for (auto &distanceTrigger : measurementDistanceIntervalCommands)
+			{
+				if (totalMachineDistance >= (distanceTrigger.lastValue + distanceTrigger.processDataValue))
+				{
+					ProcessDataCallbackInfo requestData = { 0, 0, 0, 0, false, false };
+
+					requestData.elementNumber = distanceTrigger.elementNumber;
+					requestData.ddi = distanceTrigger.ddi;
+					queuedValueRequests.push_back(requestData);
+					distanceTrigger.lastValue = totalMachineDistance;
+				}
+			}
+		}
+	}
+
 	void TaskControllerClient::update()
 	{
+		DeviceDescriptorObjectPool *pool = nullptr;
+
+		// Check if we need to check all default process data requests before proceeding to queue/state processing.
+		if (shouldProcessAllDefaultProcessDataRequests)
+		{
+			shouldProcessAllDefaultProcessDataRequests = false;
+
+			if (nullptr != clientDDOP)
+			{
+				// Already have a DDOP, so we can process the requests.
+				pool = clientDDOP.get();
+			}
+			else
+			{
+				// Need to parse the DDOP to know what the default process data is. This could fail if the DDOP is invalid
+				// so if it fails, you need to check your DDOP for issues and the log for [DDOP] events!
+				DeviceDescriptorObjectPool tempPool;
+				bool poolValid = false;
+
+				if (nullptr != userSuppliedVectorDDOP)
+				{
+					poolValid = tempPool.deserialize_binary_object_pool(userSuppliedVectorDDOP->data(), userSuppliedVectorDDOP->size(), myControlFunction->get_NAME());
+				}
+				else if (nullptr != userSuppliedBinaryDDOP)
+				{
+					poolValid = tempPool.deserialize_binary_object_pool(userSuppliedBinaryDDOP, userSuppliedBinaryDDOPSize_bytes, myControlFunction->get_NAME());
+				}
+
+				if (poolValid)
+				{
+					pool = &tempPool;
+				}
+				else
+				{
+					LOG_ERROR("[TC]: Cannot proceed with default process data request without a valid DDOP. Check log for [DDOP] events and fix any logged issues in your DDOP.");
+				}
+			}
+
+			if (nullptr != pool)
+			{
+				for (std::size_t i = 0; i < pool->size(); i++)
+				{
+					auto object = pool->get_object_by_index(i);
+
+					// Find every element, then find every DPD under it. For every DPD, check if it is a member of the default set
+					// If it is, then we need to query for the trigger settings and send the initial value to the TC.
+
+					if (task_controller_object::ObjectTypes::DeviceElement == object->get_object_type())
+					{
+						auto deviceElement = std::static_pointer_cast<task_controller_object::DeviceElementObject>(object);
+
+						for (std::size_t j = 0; j < deviceElement->get_number_child_objects(); j++)
+						{
+							std::uint16_t childID = deviceElement->get_child_object_id(j);
+							auto childObject = pool->get_object_by_id(childID);
+
+							if ((nullptr != childObject) &&
+							    (task_controller_object::ObjectTypes::DeviceProcessData == childObject->get_object_type()))
+							{
+								auto processData = std::static_pointer_cast<task_controller_object::DeviceProcessDataObject>(childObject);
+								DefaultProcessDataSettings settings;
+
+								for (const auto &callback : defaultProcessDataRequestedCallbacks)
+								{
+									if (callback.callback(deviceElement->get_element_number(), processData->get_ddi(), settings, callback.parent))
+									{
+										populate_any_triggers_from_settings(processData, deviceElement->get_element_number(), processData->get_ddi(), settings);
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		switch (currentState)
 		{
 			case StateMachineState::Disconnected:
@@ -871,6 +994,11 @@ namespace isobus
 		}
 	}
 
+	bool TaskControllerClient::DefaultProcessDataRequestCallbackInfo::operator==(const DefaultProcessDataRequestCallbackInfo &obj) const
+	{
+		return ((obj.callback == this->callback) && (obj.parent == this->parent));
+	}
+
 	bool TaskControllerClient::ProcessDataCallbackInfo::operator==(const ProcessDataCallbackInfo &obj) const
 	{
 		return ((obj.ddi == this->ddi) && (obj.elementNumber == this->elementNumber));
@@ -886,6 +1014,145 @@ namespace isobus
 		return (obj.callback == this->callback) && (obj.parent == this->parent);
 	}
 
+	void TaskControllerClient::add_measurement_change_threshold(ProcessDataCallbackInfo &info)
+	{
+		auto previousCommand = std::find(measurementOnChangeThresholdCommands.begin(), measurementOnChangeThresholdCommands.end(), info);
+		if (measurementOnChangeThresholdCommands.end() == previousCommand)
+		{
+			measurementOnChangeThresholdCommands.push_back(info);
+			LOG_DEBUG("[TC]: New change threshold trigger. Element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " on change by at least: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)));
+		}
+		else
+		{
+			// Just update the existing one with the new value
+			previousCommand->processDataValue = info.processDataValue;
+			previousCommand->thresholdPassed = false;
+			LOG_DEBUG("[TC]: Altered change threshold trigger. Element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " new threshold: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)));
+		}
+	}
+
+	void TaskControllerClient::add_measurement_distance_interval(ProcessDataCallbackInfo &info)
+	{
+		auto previousCommand = std::find(measurementDistanceIntervalCommands.begin(), measurementDistanceIntervalCommands.end(), info);
+		if (measurementDistanceIntervalCommands.end() == previousCommand)
+		{
+			measurementDistanceIntervalCommands.push_back(info);
+			LOG_DEBUG("[TC]: New distance interval trigger. Element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " every: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)) +
+			          " mm.");
+		}
+		else
+		{
+			// Use the existing one and update the value
+			previousCommand->processDataValue = info.processDataValue;
+			LOG_DEBUG("[TC]: Altered distance interval trigger for element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " every: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)) +
+			          " mm.");
+		}
+	}
+
+	void TaskControllerClient::add_measurement_time_interval(ProcessDataCallbackInfo &info)
+	{
+		auto previousCommand = std::find(measurementTimeIntervalCommands.begin(), measurementTimeIntervalCommands.end(), info);
+		if (measurementTimeIntervalCommands.end() == previousCommand)
+		{
+			measurementTimeIntervalCommands.push_back(info);
+			LOG_DEBUG("[TC]: New time interval trigger. Element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " every: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)) +
+			          " milliseconds.");
+		}
+		else
+		{
+			// Use the existing one and update the value
+			previousCommand->processDataValue = info.processDataValue;
+			LOG_DEBUG("[TC]: Altered time interval trigger for element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " every: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)) +
+			          " milliseconds.");
+		}
+	}
+
+	void TaskControllerClient::add_measurement_maximum_threshold(ProcessDataCallbackInfo &info)
+	{
+		auto previousCommand = std::find(measurementMaximumThresholdCommands.begin(), measurementMaximumThresholdCommands.end(), info);
+		if (measurementMaximumThresholdCommands.end() == previousCommand)
+		{
+			measurementMaximumThresholdCommands.push_back(info);
+			LOG_DEBUG("[TC]: New maximum measurement threshold trigger. Element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " when it is above the raw value: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)));
+		}
+		else
+		{
+			// Just update the existing one with the new value
+			previousCommand->processDataValue = info.processDataValue;
+			previousCommand->thresholdPassed = false;
+
+			LOG_DEBUG("[TC]: Altered maximum threshold trigger for element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " threshold: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)));
+		}
+	}
+
+	void TaskControllerClient::add_measurement_minimum_threshold(ProcessDataCallbackInfo &info)
+	{
+		auto previousCommand = std::find(measurementMinimumThresholdCommands.begin(), measurementMinimumThresholdCommands.end(), info);
+		if (measurementMinimumThresholdCommands.end() == previousCommand)
+		{
+			measurementMinimumThresholdCommands.push_back(info);
+			LOG_DEBUG("[TC]: New minimum measurement threshold trigger. Element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " when it is below the raw value: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)));
+		}
+		else
+		{
+			// Just update the existing one with the new value
+			previousCommand->processDataValue = info.processDataValue;
+			previousCommand->thresholdPassed = false;
+
+			LOG_DEBUG("[TC]: Altered minimum threshold trigger for element: " +
+			          isobus::to_string(static_cast<int>(info.elementNumber)) +
+			          " DDI: " +
+			          isobus::to_string(static_cast<int>(info.ddi)) +
+			          " threshold: " +
+			          isobus::to_string(static_cast<int>(info.processDataValue)));
+		}
+	}
+
 	void TaskControllerClient::clear_queues()
 	{
 		queuedValueRequests.clear();
@@ -894,6 +1161,7 @@ namespace isobus
 		measurementMinimumThresholdCommands.clear();
 		measurementMaximumThresholdCommands.clear();
 		measurementOnChangeThresholdCommands.clear();
+		measurementDistanceIntervalCommands.clear();
 	}
 
 	bool TaskControllerClient::get_was_ddop_supplied() const
@@ -926,6 +1194,98 @@ namespace isobus
 				break;
 		}
 		return retVal;
+	}
+
+	void TaskControllerClient::populate_any_triggers_from_settings(std::shared_ptr<task_controller_object::DeviceProcessDataObject> processDataObject, std::uint16_t elementNumber, std::uint16_t DDI, const DefaultProcessDataSettings &settings)
+	{
+		if (nullptr != processDataObject)
+		{
+			if (settings.enableChangeThresholdTrigger)
+			{
+				if (0 != (processDataObject->get_trigger_methods_bitfield() & static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::AvailableTriggerMethods::ThresholdLimits)))
+				{
+					ProcessDataCallbackInfo triggerData = { 0, 0, 0, 0, false, false };
+
+					triggerData.elementNumber = elementNumber;
+					triggerData.ddi = DDI;
+					triggerData.processDataValue = settings.changeThreshold;
+					add_measurement_change_threshold(triggerData);
+				}
+				else
+				{
+					LOG_ERROR("[TC]: You have enabled a change threshold trigger, but your DDOP does not define it for this object! Element: %d, DDI: %d. You need to edit your DDOP, or remove this trigger.", elementNumber, DDI);
+				}
+			}
+			if (settings.enableDistanceTrigger)
+			{
+				if (0 != (processDataObject->get_trigger_methods_bitfield() & static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::AvailableTriggerMethods::DistanceInterval)))
+				{
+					ProcessDataCallbackInfo triggerData = { 0, 0, 0, 0, false, false };
+
+					// Distance triggers are weird because distance needs to be handled by the consuming application, not this interface.
+					// We track it anyways so that the value can be sent when the trigger is set at least.
+					triggerData.elementNumber = elementNumber;
+					triggerData.ddi = DDI;
+					triggerData.processDataValue = settings.distanceTriggerInterval_mm;
+					add_measurement_distance_interval(triggerData);
+				}
+				else
+				{
+					LOG_ERROR("[TC]: You have enabled a distance interval trigger, but your DDOP does not define it for this object! Element: %d, DDI: %d. You need to edit your DDOP, or remove this trigger.", elementNumber, DDI);
+				}
+			}
+			if (settings.enableMaximumWithinThresholdTrigger)
+			{
+				if (0 != (processDataObject->get_trigger_methods_bitfield() & static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::AvailableTriggerMethods::ThresholdLimits)))
+				{
+					ProcessDataCallbackInfo triggerData = { 0, 0, 0, 0, false, false };
+
+					triggerData.elementNumber = elementNumber;
+					triggerData.ddi = DDI;
+					triggerData.processDataValue = settings.maximumWithinThreshold;
+					add_measurement_maximum_threshold(triggerData);
+				}
+				else
+				{
+					LOG_ERROR("[TC]: You have enabled a maximum threshold limit trigger, but your DDOP does not define it for this object! Element: %d, DDI: %d. You need to edit your DDOP, or remove this trigger.", elementNumber, DDI);
+				}
+			}
+
+			if (settings.enableMinimumWithinThresholdTrigger)
+			{
+				if (0 != (processDataObject->get_trigger_methods_bitfield() & static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::AvailableTriggerMethods::ThresholdLimits)))
+				{
+					ProcessDataCallbackInfo triggerData = { 0, 0, 0, 0, false, false };
+
+					triggerData.elementNumber = elementNumber;
+					triggerData.ddi = DDI;
+					triggerData.processDataValue = settings.enableMinimumWithinThresholdTrigger;
+					add_measurement_minimum_threshold(triggerData);
+				}
+				else
+				{
+					LOG_ERROR("[TC]: You have enabled a minimum threshold limit trigger, but your DDOP does not define it for this object! Element: %d, DDI: %d. You need to edit your DDOP, or remove this trigger.", elementNumber, DDI);
+				}
+			}
+
+			if (settings.enableTimeTrigger)
+			{
+				if (0 != (processDataObject->get_trigger_methods_bitfield() & static_cast<std::uint8_t>(task_controller_object::DeviceProcessDataObject::AvailableTriggerMethods::TimeInterval)))
+				{
+					ProcessDataCallbackInfo triggerData = { 0, 0, 0, 0, false, false };
+
+					// We'll automatically send time interval triggers to the TC if we have the timestamp set to zero here, so no need to manually mess with sending the trigger.
+					triggerData.elementNumber = elementNumber;
+					triggerData.ddi = DDI;
+					triggerData.processDataValue = settings.timeTriggerInterval_ms;
+					add_measurement_time_interval(triggerData);
+				}
+				else
+				{
+					LOG_ERROR("[TC]: You have enabled a time interval trigger, but your DDOP does not define it for this object! Element: %d, DDI: %d. You need to edit your DDOP, or remove this trigger.", elementNumber, DDI);
+				}
+			}
+		}
 	}
 
 	void TaskControllerClient::process_labels_from_ddop()
@@ -973,7 +1333,17 @@ namespace isobus
 				auto getDDOPByteAt = [this](std::size_t index) {
 					if (ddopUploadMode == DDOPUploadType::UserProvidedBinaryPointer)
 					{
-						return userSuppliedBinaryDDOP[index];
+						assert(nullptr != userSuppliedBinaryDDOP); // Can't be null!
+
+						// just in case assert is disabled
+						if (nullptr != userSuppliedBinaryDDOP)
+						{
+							return userSuppliedBinaryDDOP[index];
+						}
+						else
+						{
+							return std::uint8_t(0);
+						}
 					}
 					else
 					{
@@ -1569,6 +1939,21 @@ namespace isobus
 							                                (static_cast<std::int32_t>(messageData[6]) << 16) |
 							                                (static_cast<std::int32_t>(messageData[7]) << 24));
 							parentTC->queuedValueRequests.push_back(requestData);
+
+							// Handle requests for default process data specially. Ask the app for all the defaults and send a response.
+							if (static_cast<std::uint16_t>(DataDescriptionIndex::RequestDefaultProcessData) == requestData.ddi)
+							{
+								// The RequestDefaultProcessData DDI may only be requested from	device element 0 of a device
+								if (0 == requestData.elementNumber)
+								{
+									LOG_DEBUG("[TC]: Server requested default process data.");
+									parentTC->shouldProcessAllDefaultProcessDataRequests = true; // Defer to the TC thread or app thread
+								}
+								else
+								{
+									LOG_WARNING("[TC]: Server requested default process data from an illegal element.");
+								}
+							}
 						}
 						break;
 
@@ -1619,31 +2004,7 @@ namespace isobus
 							                                (static_cast<std::int32_t>(messageData[6]) << 16) |
 							                                (static_cast<std::int32_t>(messageData[7]) << 24));
 							commandData.lastValue = static_cast<std::int32_t>(SystemTiming::get_timestamp_ms());
-
-							auto previousCommand = std::find(parentTC->measurementTimeIntervalCommands.begin(), parentTC->measurementTimeIntervalCommands.end(), commandData);
-							if (parentTC->measurementTimeIntervalCommands.end() == previousCommand)
-							{
-								parentTC->measurementTimeIntervalCommands.push_back(commandData);
-								LOG_DEBUG("[TC]: TC Requests element: " +
-								          isobus::to_string(static_cast<int>(commandData.elementNumber)) +
-								          " DDI: " +
-								          isobus::to_string(static_cast<int>(commandData.ddi)) +
-								          " every: " +
-								          isobus::to_string(static_cast<int>(commandData.processDataValue)) +
-								          " milliseconds.");
-							}
-							else
-							{
-								// Use the existing one and update the value
-								previousCommand->processDataValue = commandData.processDataValue;
-								LOG_DEBUG("[TC]: TC Altered time interval request for element: " +
-								          isobus::to_string(static_cast<int>(commandData.elementNumber)) +
-								          " DDI: " +
-								          isobus::to_string(static_cast<int>(commandData.ddi)) +
-								          " every: " +
-								          isobus::to_string(static_cast<int>(commandData.processDataValue)) +
-								          " milliseconds.");
-							}
+							parentTC->add_measurement_time_interval(commandData);
 						}
 						break;
 
@@ -1659,24 +2020,7 @@ namespace isobus
 							                                (static_cast<std::int32_t>(messageData[5]) << 8) |
 							                                (static_cast<std::int32_t>(messageData[6]) << 16) |
 							                                (static_cast<std::int32_t>(messageData[7]) << 24));
-
-							auto previousCommand = std::find(parentTC->measurementMaximumThresholdCommands.begin(), parentTC->measurementMaximumThresholdCommands.end(), commandData);
-							if (parentTC->measurementMaximumThresholdCommands.end() == previousCommand)
-							{
-								parentTC->measurementMaximumThresholdCommands.push_back(commandData);
-								LOG_DEBUG("[TC]: TC Requests element: " +
-								          isobus::to_string(static_cast<int>(commandData.elementNumber)) +
-								          " DDI: " +
-								          isobus::to_string(static_cast<int>(commandData.ddi)) +
-								          " when it is above the raw value: " +
-								          isobus::to_string(static_cast<int>(commandData.processDataValue)));
-							}
-							else
-							{
-								// Just update the existing one with the new value
-								previousCommand->processDataValue = commandData.processDataValue;
-								previousCommand->thresholdPassed = false;
-							}
+							parentTC->add_measurement_maximum_threshold(commandData);
 						}
 						break;
 
@@ -1692,24 +2036,7 @@ namespace isobus
 							                                (static_cast<std::int32_t>(messageData[5]) << 8) |
 							                                (static_cast<std::int32_t>(messageData[6]) << 16) |
 							                                (static_cast<std::int32_t>(messageData[7]) << 24));
-
-							auto previousCommand = std::find(parentTC->measurementMinimumThresholdCommands.begin(), parentTC->measurementMinimumThresholdCommands.end(), commandData);
-							if (parentTC->measurementMinimumThresholdCommands.end() == previousCommand)
-							{
-								parentTC->measurementMinimumThresholdCommands.push_back(commandData);
-								LOG_DEBUG("[TC]: TC Requests Element " +
-								          isobus::to_string(static_cast<int>(commandData.elementNumber)) +
-								          " DDI: " +
-								          isobus::to_string(static_cast<int>(commandData.ddi)) +
-								          " when it is below the raw value: " +
-								          isobus::to_string(static_cast<int>(commandData.processDataValue)));
-							}
-							else
-							{
-								// Just update the existing one with the new value
-								previousCommand->processDataValue = commandData.processDataValue;
-								previousCommand->thresholdPassed = false;
-							}
+							parentTC->add_measurement_minimum_threshold(commandData);
 						}
 						break;
 
@@ -1725,24 +2052,23 @@ namespace isobus
 							                                (static_cast<std::int32_t>(messageData[5]) << 8) |
 							                                (static_cast<std::int32_t>(messageData[6]) << 16) |
 							                                (static_cast<std::int32_t>(messageData[7]) << 24));
+							parentTC->add_measurement_change_threshold(commandData);
+						}
+						break;
 
-							auto previousCommand = std::find(parentTC->measurementOnChangeThresholdCommands.begin(), parentTC->measurementOnChangeThresholdCommands.end(), commandData);
-							if (parentTC->measurementOnChangeThresholdCommands.end() == previousCommand)
-							{
-								parentTC->measurementOnChangeThresholdCommands.push_back(commandData);
-								LOG_DEBUG("[TC]: TC Requests element " +
-								          isobus::to_string(static_cast<int>(commandData.elementNumber)) +
-								          " DDI: " +
-								          isobus::to_string(static_cast<int>(commandData.ddi)) +
-								          " on change by at least: " +
-								          isobus::to_string(static_cast<int>(commandData.processDataValue)));
-							}
-							else
-							{
-								// Just update the existing one with the new value
-								previousCommand->processDataValue = commandData.processDataValue;
-								previousCommand->thresholdPassed = false;
-							}
+						case ProcessDataCommands::MeasurementDistanceInterval:
+						{
+							ProcessDataCallbackInfo commandData = { 0, 0, 0, 0, false, false };
+							LOCK_GUARD(Mutex, clientMutex);
+
+							commandData.elementNumber = static_cast<std::uint16_t>(static_cast<std::uint16_t>(messageData[0] >> 4) | (static_cast<std::uint16_t>(messageData[1]) << 4));
+							commandData.ddi = static_cast<std::uint16_t>(messageData[2]) |
+							  (static_cast<std::uint16_t>(messageData[3]) << 8);
+							commandData.processDataValue = (static_cast<std::int32_t>(messageData[4]) |
+							                                (static_cast<std::int32_t>(messageData[5]) << 8) |
+							                                (static_cast<std::int32_t>(messageData[6]) << 16) |
+							                                (static_cast<std::int32_t>(messageData[7]) << 24));
+							parentTC->add_measurement_distance_interval(commandData);
 						}
 						break;
 
@@ -1860,9 +2186,9 @@ namespace isobus
 		                                 (static_cast<std::uint8_t>(DeviceDescriptorCommands::ObjectPoolDelete) << 4));
 	}
 
-	bool TaskControllerClient::send_generic_process_data(std::uint8_t multiplexor) const
+	bool TaskControllerClient::send_generic_process_data(std::uint8_t multiplexer) const
 	{
-		const std::array<std::uint8_t, CAN_DATA_LENGTH> buffer = { multiplexor,
+		const std::array<std::uint8_t, CAN_DATA_LENGTH> buffer = { multiplexer,
 			                                                         0xFF,
 			                                                         0xFF,
 			                                                         0xFF,

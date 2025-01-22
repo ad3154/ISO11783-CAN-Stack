@@ -3,6 +3,7 @@
 #include "isobus/hardware_integration/can_hardware_interface.hpp"
 #include "isobus/hardware_integration/virtual_can_plugin.hpp"
 #include "isobus/isobus/can_network_manager.hpp"
+#include "isobus/isobus/isobus_standard_data_description_indices.hpp"
 #include "isobus/isobus/isobus_task_controller_client.hpp"
 #include "isobus/isobus/isobus_virtual_terminal_client.hpp"
 #include "isobus/utility/system_timing.hpp"
@@ -1676,7 +1677,50 @@ TEST(TASK_CONTROLLER_CLIENT_TESTS, CallbackTests)
 	requestedDDI = 0;
 	requestedElement = 0;
 
-	// Request a value using the public interface
+	// Test distance thresholds
+	testFrame.identifier = 0x18CB86F7;
+	testFrame.data[0] = 0xA5;
+	testFrame.data[1] = 0x05;
+	testFrame.data[2] = 0x19;
+	testFrame.data[3] = 0x3B;
+	testFrame.data[4] = 0x10; // Distance of 10
+	testFrame.data[5] = 0x00;
+	testFrame.data[6] = 0x00;
+	testFrame.data[7] = 0x00;
+	CANNetworkManager::CANNetwork.process_receive_can_message_frame(testFrame);
+	CANNetworkManager::CANNetwork.update();
+	interfaceUnderTest.update();
+
+	EXPECT_FALSE(valueRequested);
+
+	interfaceUnderTest.set_distance(15);
+	interfaceUnderTest.update();
+
+	EXPECT_FALSE(valueRequested);
+
+	interfaceUnderTest.set_distance(16);
+	interfaceUnderTest.update();
+
+	EXPECT_TRUE(valueRequested);
+	EXPECT_EQ(requestedDDI, 0x3B19);
+	valueRequested = false;
+	requestedDDI = 0;
+	requestedElement = 0;
+
+	// Test same value doesn't re-send the value
+	interfaceUnderTest.set_distance(16);
+	interfaceUnderTest.update();
+
+	EXPECT_FALSE(valueRequested);
+
+	// Reset
+	interfaceUnderTest.test_wrapper_set_state(TaskControllerClient::StateMachineState::Disconnected); // Clear commands
+	interfaceUnderTest.test_wrapper_set_state(TaskControllerClient::StateMachineState::Connected); // Arbitrary
+	valueRequested = false;
+	requestedDDI = 0;
+	requestedElement = 0;
+
+	// Request a value change using the public interface
 	interfaceUnderTest.on_value_changed_trigger(0x4, 0x3);
 	interfaceUnderTest.update();
 
@@ -1757,6 +1801,100 @@ TEST(TASK_CONTROLLER_CLIENT_TESTS, LanguageCommandFallback)
 	EXPECT_EQ(interfaceUnderTest.test_wrapper_get_state(), TaskControllerClient::StateMachineState::ProcessDDOP);
 	CANNetworkManager::CANNetwork.deactivate_control_function(TestPartnerTC);
 	CANNetworkManager::CANNetwork.deactivate_control_function(TestPartnerVT);
+	CANNetworkManager::CANNetwork.deactivate_control_function(internalECU);
+
+	CANHardwareInterface::stop();
+	CANNetworkManager::CANNetwork.update();
+}
+
+static bool default_process_data_callback(std::uint16_t elementNumber,
+                                          std::uint16_t DDI,
+                                          TaskControllerClient::DefaultProcessDataSettings &returnedSettings,
+                                          void *)
+{
+	// Handle two specific default process data variables as an example.
+	// These are two variables in the bin object, which is element 3 in the object pool.
+	if (3 == elementNumber)
+	{
+		switch (DDI)
+		{
+			case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::MaximumVolumeContent):
+			case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualVolumeContent):
+			{
+				returnedSettings.timeTriggerInterval_ms = 1000;
+				returnedSettings.enableTimeTrigger = true;
+				return true;
+			}
+			break;
+
+			default:
+			{
+			}
+			break;
+		}
+	}
+	return false;
+}
+
+TEST(TASK_CONTROLLER_CLIENT_TESTS, DefaultProcessDataTest)
+{
+	auto ddop = std::make_shared<DeviceDescriptorObjectPool>();
+	ddop->set_task_controller_compatibility_level(3);
+	ASSERT_TRUE(ddop->deserialize_binary_object_pool(DerivedTestTCClient::testBinaryDDOP, sizeof(DerivedTestTCClient::testBinaryDDOP)));
+
+	VirtualCANPlugin serverTC;
+	serverTC.open();
+
+	CANHardwareInterface::set_number_of_can_channels(1);
+	CANHardwareInterface::assign_can_channel_frame_handler(0, std::make_shared<VirtualCANPlugin>());
+	CANHardwareInterface::start();
+
+	auto internalECU = test_helpers::claim_internal_control_function(0x80, 0);
+	auto TestPartnerTC = test_helpers::force_claim_partnered_control_function(0xDF, 0);
+
+	DerivedTestTCClient interfaceUnderTest(TestPartnerTC, internalECU);
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	interfaceUnderTest.update();
+
+	CANMessageFrame testFrame = {};
+
+	ASSERT_TRUE(internalECU->get_address_valid());
+	ASSERT_TRUE(TestPartnerTC->get_address_valid());
+	interfaceUnderTest.configure(ddop, 1, 32, 32, true, false, true, false, true);
+	interfaceUnderTest.initialize(false);
+	interfaceUnderTest.add_default_process_data_requested_callback(default_process_data_callback, &interfaceUnderTest);
+	interfaceUnderTest.test_wrapper_set_state(TaskControllerClient::StateMachineState::Connected);
+
+	// Force a status message out of the TC
+	testFrame.identifier = (0x18CBFF00 | static_cast<std::uint32_t>(TestPartnerTC->get_address()));
+	testFrame.dataLength = CAN_DATA_LENGTH;
+	testFrame.data[0] = 0xFE; // Status mux
+	testFrame.data[1] = 0xFF; // Element number, set to not available
+	testFrame.data[2] = 0xFF; // DDI (N/A)
+	testFrame.data[3] = 0xFF; // DDI (N/A)
+	testFrame.data[4] = 0x01; // Status (task active)
+	testFrame.data[5] = 0x00; // Command address
+	testFrame.data[6] = 0x00; // Command
+	testFrame.data[7] = 0xFF; // Reserved
+	CANNetworkManager::CANNetwork.process_receive_can_message_frame(testFrame);
+	CANNetworkManager::CANNetwork.update();
+
+	// Send a request for the default process data DDI
+	testFrame.identifier = (0x18CB0000 | (static_cast<std::uint32_t>(internalECU->get_address()) << 8) | static_cast<std::uint32_t>(TestPartnerTC->get_address()));
+	testFrame.data[0] = 0x02; // Mux + Element LSNibble
+	testFrame.data[1] = 0x00; // Element MSB
+	testFrame.data[2] = 0xFF; // DDI
+	testFrame.data[3] = 0xDF; // DDI
+	testFrame.data[4] = 0x00;
+	testFrame.data[5] = 0x00;
+	testFrame.data[6] = 0x00;
+	testFrame.data[7] = 0x00;
+	CANNetworkManager::CANNetwork.process_receive_can_message_frame(testFrame);
+	CANNetworkManager::CANNetwork.update();
+	interfaceUnderTest.update();
+
+	CANNetworkManager::CANNetwork.deactivate_control_function(TestPartnerTC);
 	CANNetworkManager::CANNetwork.deactivate_control_function(internalECU);
 
 	CANHardwareInterface::stop();
