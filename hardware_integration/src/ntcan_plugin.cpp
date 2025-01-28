@@ -40,6 +40,7 @@ namespace isobus
 		if (NTCAN_NO_HANDLE != handle)
 		{
 			isobus::CANStackLogger::error("[NTCAN]: Attempting to open a connection that is already open");
+			return;
 		}
 		std::uint32_t mode = 0;
 		std::int32_t txQueueSize = 8;

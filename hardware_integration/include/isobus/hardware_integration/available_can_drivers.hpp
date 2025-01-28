@@ -50,4 +50,8 @@
 #include "isobus/hardware_integration/ntcan_plugin.hpp"
 #endif
 
+#ifdef ISOBUS_VSCAN_AVAILABLE
+#include "isobus/hardware_integration/vscan_plugin.hpp"
+#endif
+
 #endif // AVAILABLE_CAN_DRIVERS_HPP

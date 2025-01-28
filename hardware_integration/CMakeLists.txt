@@ -104,6 +104,10 @@ if("NTCAN" IN_LIST CAN_DRIVER)
   list(APPEND HARDWARE_INTEGRATION_SRC "ntcan_plugin.cpp")
   list(APPEND HARDWARE_INTEGRATION_INCLUDE "ntcan_plugin.hpp")
 endif()
+if("VSCAN" IN_LIST CAN_DRIVER)
+  list(APPEND HARDWARE_INTEGRATION_SRC "vscan_plugin.cpp")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "vscan_plugin.hpp")
+endif()
 
 # Prepend the source directory path to all the source files
 prepend(HARDWARE_INTEGRATION_SRC ${HARDWARE_INTEGRATION_SRC_DIR}
@@ -348,6 +352,65 @@ if("NTCAN" IN_LIST CAN_DRIVER)
     message(
       FATAL_ERROR
         "NTCAN Selected but no supported OS was detected. Only Windows is supported currently."
+    )
+  endif()
+endif()
+if("VSCAN" IN_LIST CAN_DRIVER)
+  if(MSVC)
+    # See https://gitlab.kitware.com/cmake/cmake/-/issues/15170
+    set(CMAKE_SYSTEM_PROCESSOR ${MSVC_CXX_ARCHITECTURE_ID})
+  endif()
+  if(DEFINED ENV{VSCAN_API_DIR})
+    target_include_directories(HardwareIntegration PUBLIC $ENV{VSCAN_API_DIR})
+    if(WIN32)
+      message(
+        AUTHOR_WARNING
+          "The VSCAN driver requires vs_can_api.dll to be in the same directory as the executable. You can find this file in the VSCAN API directory."
+      )
+      if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" OR CMAKE_SYSTEM_PROCESSOR
+                                                    STREQUAL "x64")
+        message(STATUS "Detected Windows x64, linking to VSCAN API x64 library")
+        target_link_libraries(HardwareIntegration
+                              PRIVATE $ENV{VSCAN_API_DIR}/Win64/vs_can_api.lib)
+      elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR
+                                                         STREQUAL "X86")
+        message(STATUS "Detected Windows x86, linking to VSCAN API x86 library")
+        target_link_libraries(HardwareIntegration
+                              PRIVATE $ENV{VSCAN_API_DIR}/Win32/vs_can_api.lib)
+      else()
+        message(
+          FATAL_ERROR
+            "VSCAN Selected but no supported processor arch was detected. Only x64 and x86 are supported."
+        )
+      endif()
+    elseif(UNIX)
+      if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" OR CMAKE_SYSTEM_PROCESSOR
+                                                    STREQUAL "x64")
+        message(STATUS "Detected Linux x64, linking to VSCAN API x64 library")
+        target_link_libraries(HardwareIntegration
+                              PRIVATE $ENV{VSCAN_API_DIR}/Linux/libvs_can_api.a)
+      elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR
+                                                         STREQUAL "X86")
+        message(STATUS "Detected Linux x86, linking to VSCAN API x86 library")
+        target_link_libraries(
+          HardwareIntegration
+          PRIVATE "$ENV{VSCAN_API_DIR}/Linux x86-64/libvs_can_api.a")
+      else()
+        message(
+          FATAL_ERROR
+            "VSCAN Selected but no supported processor arch was detected. Only x64 and x86 are supported."
+        )
+      endif()
+    else()
+      message(
+        FATAL_ERROR
+          "VSCAN Selected but no supported OS was detected. Only Windows and Linux are supported currently."
+      )
+    endif()
+  else()
+    message(
+      FATAL_ERROR
+        "VSCAN Selected but no VSCAN API was found. Set the 'VSCAN_API_DIR' environment variable to the path of the VSCAN SDK."
     )
   endif()
 endif()
