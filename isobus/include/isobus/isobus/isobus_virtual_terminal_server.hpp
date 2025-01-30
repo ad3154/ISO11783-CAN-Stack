@@ -258,6 +258,10 @@ namespace isobus
 		/// @returns The event dispatcher for change active mask events
 		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, std::uint16_t> &get_on_change_active_mask_event_dispatcher();
 
+		/// @brief Returns the event dispatcher for change active softkey mask events
+		/// @returns The event dispatcher for change active softkey mask events
+		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, std::uint16_t> &get_on_change_active_softkey_mask_event_dispatcher();
+
 		/// @brief Returns the event dispatcher for when an object is focused
 		/// @returns The event dispatcher for when an object is focused
 		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, bool> &get_on_focus_object_event_dispatcher();
@@ -669,6 +673,7 @@ namespace isobus
 
 		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>> onRepaintEventDispatcher; ///< Event dispatcher for repaint events
 		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, std::uint16_t> onChangeActiveMaskEventDispatcher; ///< Event dispatcher for active mask change events
+		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, std::uint16_t> onChangeActiveSoftKeyMaskEventDispatcher; ///< Event dispatcher for active softkey mask change events
 		EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, bool> onFocusObjectEventDispatcher; ///< Event dispatcher for focus object events
 		LanguageCommandInterface languageCommandInterface; ///< The language command interface for the server
 		std::shared_ptr<InternalControlFunction> serverInternalControlFunction; ///< The internal control function for the server

@@ -7,6 +7,8 @@
 /// @copyright 2023 The Open-Agriculture Developers
 //================================================================================================
 #include "isobus/isobus/isobus_virtual_terminal_objects.hpp"
+#include <iostream>
+#include <ostream>
 #include "isobus/isobus/isobus_virtual_terminal_server_managed_working_set.hpp"
 
 namespace isobus
@@ -590,6 +592,7 @@ namespace isobus
 			set_soft_key_mask(newMaskID);
 			retVal = true;
 		}
+
 		return retVal;
 	}
 

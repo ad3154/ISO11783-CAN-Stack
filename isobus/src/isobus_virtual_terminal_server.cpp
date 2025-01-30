@@ -90,6 +90,11 @@ namespace isobus
 		return onChangeActiveMaskEventDispatcher;
 	}
 
+	EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, std::uint16_t> &VirtualTerminalServer::get_on_change_active_softkey_mask_event_dispatcher()
+	{
+		return onChangeActiveSoftKeyMaskEventDispatcher;
+	}
+
 	EventDispatcher<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, std::uint16_t, bool> &VirtualTerminalServer::get_on_focus_object_event_dispatcher()
 	{
 		return onFocusObjectEventDispatcher;
@@ -1331,67 +1336,69 @@ namespace isobus
 
 								case Function::ChangeSoftKeyMaskCommand:
 								{
-									auto objectID = static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[2]) | (static_cast<std::uint16_t>(data[3]) << 8));
-									auto newObjectID = static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[4]) | (static_cast<std::uint16_t>(data[5]) << 8));
-									auto targetObject = cf->get_object_by_id(objectID);
-									auto newObject = cf->get_object_by_id(newObjectID);
+									auto dataOrAlarmMaskId = static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[2]) | (static_cast<std::uint16_t>(data[3]) << 8));
+									auto newSoftKeyMaskId = static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[4]) | (static_cast<std::uint16_t>(data[5]) << 8));
+									auto targetMask = cf->get_object_by_id(dataOrAlarmMaskId);
+									auto newSoftKeyMask = cf->get_object_by_id(newSoftKeyMaskId);
 
-									if (nullptr != targetObject)
+									if (nullptr != targetMask)
 									{
-										if ((NULL_OBJECT_ID == newObjectID) || (nullptr != newObject))
+										if ((NULL_OBJECT_ID == newSoftKeyMaskId) || (nullptr != newSoftKeyMask))
 										{
-											switch (targetObject->get_object_type())
+											switch (targetMask->get_object_type())
 											{
 												case VirtualTerminalObjectType::AlarmMask:
 												{
-													if (std::static_pointer_cast<AlarmMask>(targetObject)->change_soft_key_mask(newObjectID, cf->get_object_tree()))
+													if (std::static_pointer_cast<AlarmMask>(targetMask)->change_soft_key_mask(newSoftKeyMaskId, cf->get_object_tree()))
 													{
-														CANStackLogger::debug("[VT Server]: Client %u change soft key mask command: alarm mask object %u to %u", cf->get_control_function()->get_address(), objectID, newObjectID);
-														parentServer->send_change_soft_key_mask_response(objectID, newObjectID, 0, message.get_source_control_function());
-														parentServer->process_macro(targetObject, EventID::OnChangeSoftKeyMask, VirtualTerminalObjectType::AlarmMask, cf);
+														CANStackLogger::debug("[VT Server]: Client %u change soft key mask command: alarm mask object %u to %u", cf->get_control_function()->get_address(), dataOrAlarmMaskId, newSoftKeyMaskId);
+														parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, 0, message.get_source_control_function());
+														parentServer->onChangeActiveSoftKeyMaskEventDispatcher.call(cf, dataOrAlarmMaskId, newSoftKeyMaskId);
+														parentServer->process_macro(targetMask, EventID::OnChangeSoftKeyMask, VirtualTerminalObjectType::AlarmMask, cf);
 													}
 													else
 													{
-														CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: failed to set mask for alarm mask object %u to %u", cf->get_control_function()->get_address(), objectID, newObjectID);
-														parentServer->send_change_soft_key_mask_response(objectID, newObjectID, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::AnyOtherError)), message.get_source_control_function());
+														CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: failed to set mask for alarm mask object %u to %u", cf->get_control_function()->get_address(), dataOrAlarmMaskId, newSoftKeyMaskId);
+														parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::AnyOtherError)), message.get_source_control_function());
 													}
 												}
 												break;
 
 												case VirtualTerminalObjectType::DataMask:
 												{
-													if (std::static_pointer_cast<DataMask>(targetObject)->change_soft_key_mask(newObjectID, cf->get_object_tree()))
+													if (std::static_pointer_cast<DataMask>(targetMask)->change_soft_key_mask(newSoftKeyMaskId, cf->get_object_tree()))
 													{
-														CANStackLogger::debug("[VT Server]: Client %u change soft key mask command: data mask object %u to %u", cf->get_control_function()->get_address(), objectID, newObjectID);
-														parentServer->send_change_soft_key_mask_response(objectID, newObjectID, 0, message.get_source_control_function());
-														parentServer->process_macro(targetObject, EventID::OnChangeSoftKeyMask, VirtualTerminalObjectType::DataMask, cf);
+														CANStackLogger::debug("[VT Server]: Client %u change soft key mask command: data mask object %u to %u", cf->get_control_function()->get_address(), dataOrAlarmMaskId, newSoftKeyMaskId);
+														parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, 0, message.get_source_control_function());
+														parentServer->onChangeActiveSoftKeyMaskEventDispatcher.call(cf, dataOrAlarmMaskId, newSoftKeyMaskId);
+														parentServer->process_macro(targetMask, EventID::OnChangeSoftKeyMask, VirtualTerminalObjectType::DataMask, cf);
 													}
 													else
 													{
-														CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: failed to set mask for data mask object %u to %u", cf->get_control_function()->get_address(), objectID, newObjectID);
-														parentServer->send_change_soft_key_mask_response(objectID, newObjectID, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::AnyOtherError)), message.get_source_control_function());
+														CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: failed to set mask for data mask object %u to %u", cf->get_control_function()->get_address(), dataOrAlarmMaskId, newSoftKeyMaskId);
+														parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::AnyOtherError)), message.get_source_control_function());
 													}
 												}
 												break;
 
 												default:
 												{
-													CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: invalid object type for object %u", cf->get_control_function()->get_address(), objectID);
-													parentServer->send_change_soft_key_mask_response(objectID, newObjectID, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::AnyOtherError)), message.get_source_control_function());
+													CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: invalid object type for object %u", cf->get_control_function()->get_address(), dataOrAlarmMaskId);
+													parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::AnyOtherError)), message.get_source_control_function());
 												}
 												break;
 											}
 										}
 										else
 										{
-											CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: invalid soft key object ID of %u", cf->get_control_function()->get_address(), newObjectID);
-											parentServer->send_change_soft_key_mask_response(objectID, newObjectID, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::InvalidSoftKeyMaskObjectID)), message.get_source_control_function());
+											CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: invalid soft key object ID of %u", cf->get_control_function()->get_address(), newSoftKeyMaskId);
+											parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::InvalidSoftKeyMaskObjectID)), message.get_source_control_function());
 										}
 									}
 									else
 									{
-										CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: invalid data mask or alarm mask object ID of %u", cf->get_control_function()->get_address(), objectID);
-										parentServer->send_change_soft_key_mask_response(objectID, newObjectID, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::InvalidDataOrAlarmMaskObjectID)), message.get_source_control_function());
+										CANStackLogger::warn("[VT Server]: Client %u change soft key mask command: invalid data mask or alarm mask object ID of %u", cf->get_control_function()->get_address(), dataOrAlarmMaskId);
+										parentServer->send_change_soft_key_mask_response(dataOrAlarmMaskId, newSoftKeyMaskId, (1 << static_cast<std::uint8_t>(ChangeSoftKeyMaskErrorBit::InvalidDataOrAlarmMaskObjectID)), message.get_source_control_function());
 									}
 								}
 								break;
