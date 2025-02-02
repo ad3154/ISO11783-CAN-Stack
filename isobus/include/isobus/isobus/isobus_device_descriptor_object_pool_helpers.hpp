@@ -174,21 +174,21 @@ namespace isobus
 		static ProductControlInformation parse_bin(DeviceDescriptorObjectPool &ddop,
 		                                           std::shared_ptr<task_controller_object::DeviceElementObject> elementObject);
 
-		/// @brief Sets the value and presence based on a DDI match.
+		/// @brief Sets the value and settable flag based on a DDI match for an object.
 		/// @param[in,out] objectPoolValue The object pool value to set.
-		/// @param[in] property The device property object.
+		/// @param[in] object The object to use to update the object pool value.
 		/// @param[in] ddi The DDI to check against.
-		static void set_value_from_property(ObjectPoolValue &objectPoolValue,
-		                                    const std::shared_ptr<task_controller_object::DevicePropertyObject> &property,
-		                                    DataDescriptionIndex ddi);
+		static void set_value_and_editable_from_object(ObjectPoolValue &objectPoolValue,
+		                                               const std::shared_ptr<task_controller_object::Object> &object,
+		                                               DataDescriptionIndex ddi);
 
-		/// @brief Sets the settable flag based on a DDI match for process data.
-		/// @param[in,out] objectPoolValue The object pool value to update.
-		/// @param[in] processData The device process data object.
-		/// @param[in] ddi The DDI to check against.
-		static void set_editable_from_process_data(ObjectPoolValue &objectPoolValue,
-		                                           const std::shared_ptr<task_controller_object::DeviceProcessDataObject> &processData,
-		                                           DataDescriptionIndex ddi);
+		/// @brief Sets the rate information based on the supplied object if the DDI is known to be a rate DDI.
+		/// @param rate The rate metadata to update.
+		/// @param object The object to use to update the product control information.
+		/// @param ddi The DDI to check against.
+		static void set_product_control_information_rate(RateMetadata &rate,
+		                                                 const std::shared_ptr<task_controller_object::Object> &object,
+		                                                 std::uint16_t ddi);
 
 		/// @brief Sets the max rate field of the product control information based on the supplied object
 		/// if the DDI is known to be a max rate DDI.

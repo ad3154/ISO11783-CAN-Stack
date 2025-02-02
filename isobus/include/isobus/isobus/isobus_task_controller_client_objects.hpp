@@ -9,6 +9,8 @@
 #ifndef ISOBUS_TASK_CONTROLLER_CLIENT_OBJECTS_HPP
 #define ISOBUS_TASK_CONTROLLER_CLIENT_OBJECTS_HPP
 
+#include "isobus/utility/data_span.hpp"
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -22,11 +24,11 @@ namespace isobus
 		/// @brief Enumerates the different kinds of DDOP objects
 		enum class ObjectTypes
 		{
-			Device, ///< The root object. Each device shall have one single Device
-			DeviceElement, ///< Subcomponent of a device. Has multiple sub-types
-			DeviceProcessData, ///< Contains a single process data variable definition
-			DeviceProperty, ///< A device property element
-			DeviceValuePresentation ///< Contains the presentation information to display the value of a DeviceProcessData or DeviceProperty object
+			Device, ///< The root object. Each device shall have one single Device (DVC)
+			DeviceElement, ///< Subcomponent of a device. Has multiple sub-types (DET)
+			DeviceProcessData, ///< Contains a single process data variable definition (DPD)
+			DeviceProperty, ///< A device property element (DPT)
+			DeviceValuePresentation ///< Contains the presentation information to display the value of a DeviceProcessData or DeviceProperty object (DVP)
 		};
 
 		/// @brief A base class for a Task Controller Object
@@ -272,6 +274,10 @@ namespace isobus
 			/// @returns true if the child object ID was found and removed, otherwise false
 			bool remove_reference_to_child_object(std::uint16_t childID);
 
+			/// @brief Returns a span of the child objects added with `add_reference_to_child_object`.
+			/// @returns A span of the child object IDs
+			DataSpan<const std::uint16_t> get_child_object_ids() const;
+
 			/// @brief Returns the number of child objects added with `add_reference_to_child_object`.
 			/// @note The maximum number of child objects is technically 65535 because the serialized
 			/// form of the value uses a 16-bit integer to store the count.
@@ -368,6 +374,11 @@ namespace isobus
 			/// @param[in] properties The new properties bitfield to set
 			void set_properties_bitfield(std::uint8_t properties);
 
+			/// @brief Tests whether a property is set in the properties bitfield
+			/// @param property The property to test for
+			/// @returns `true` if the property is set, otherwise `false`
+			bool has_property(DeviceProcessDataObject::PropertiesBit property);
+
 			/// @brief Returns the object's available trigger methods
 			/// @returns The available trigger methods bitfield for this object
 			std::uint8_t get_trigger_methods_bitfield() const;
@@ -375,6 +386,11 @@ namespace isobus
 			/// @brief Updates the object's available trigger methods bitfield to a new value
 			/// @param[in] methods The new trigger methods bitfield to set
 			void set_trigger_methods_bitfield(std::uint8_t methods);
+
+			/// @brief Tests whether a trigger method is set in the trigger methods bitfield
+			/// @param method The trigger method to test for
+			/// @returns `true` if the trigger method is set, otherwise `false`
+			bool has_trigger_method(DeviceProcessDataObject::AvailableTriggerMethods method);
 
 		private:
 			static const std::string tableID; ///< XML element namespace for DeviceProcessData.

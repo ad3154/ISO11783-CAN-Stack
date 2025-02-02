@@ -319,6 +319,11 @@ namespace isobus
 			return retVal;
 		}
 
+		DataSpan<const std::uint16_t> DeviceElementObject::get_child_object_ids() const
+		{
+			return DataSpan<const std::uint16_t>(referenceList.data(), referenceList.size());
+		}
+
 		std::uint16_t DeviceElementObject::get_number_child_objects() const
 		{
 			return static_cast<std::uint16_t>(referenceList.size());
@@ -416,6 +421,11 @@ namespace isobus
 			propertiesBitfield = properties;
 		}
 
+		bool DeviceProcessDataObject::has_property(DeviceProcessDataObject::PropertiesBit property)
+		{
+			return (0 != (propertiesBitfield & static_cast<std::uint8_t>(property)));
+		}
+
 		std::uint8_t DeviceProcessDataObject::get_trigger_methods_bitfield() const
 		{
 			return triggerMethodsBitfield;
@@ -424,6 +434,11 @@ namespace isobus
 		void DeviceProcessDataObject::set_trigger_methods_bitfield(std::uint8_t methods)
 		{
 			triggerMethodsBitfield = methods;
+		}
+
+		bool DeviceProcessDataObject::has_trigger_method(DeviceProcessDataObject::AvailableTriggerMethods method)
+		{
+			return (0 != (triggerMethodsBitfield & static_cast<std::uint8_t>(method)));
 		}
 
 		const std::string DevicePropertyObject::tableID = "DPT";
