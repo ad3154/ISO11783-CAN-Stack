@@ -31,7 +31,7 @@ namespace isobus
 	std::vector<std::unique_ptr<CANHardwareInterface::CANHardware>> CANHardwareInterface::hardwareChannels;
 	Mutex CANHardwareInterface::hardwareChannelsMutex;
 	Mutex CANHardwareInterface::updateMutex;
-	bool CANHardwareInterface::started = false;
+	std::atomic_bool CANHardwareInterface::started = { false };
 
 	CANHardwareInterface CANHardwareInterface::SINGLETON;
 

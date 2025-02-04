@@ -149,7 +149,7 @@ namespace isobus
 			void receive_thread_function();
 
 			std::unique_ptr<std::thread> receiveMessageThread; ///< Thread to manage getting messages from a CAN channel
-			bool receiveThreadRunning = false; ///< Flag to indicate if the receive thread is running
+			std::atomic_bool receiveThreadRunning = { false }; ///< Flag to indicate if the receive thread is running
 #endif
 
 			std::shared_ptr<CANHardwarePlugin> frameHandler; ///< The CAN driver to use for a CAN channel
@@ -190,7 +190,7 @@ namespace isobus
 		static std::vector<std::unique_ptr<CANHardware>> hardwareChannels; ///< A list of all CAN channel's metadata
 		static Mutex hardwareChannelsMutex; ///< Mutex to protect `hardwareChannels`
 		static Mutex updateMutex; ///< A mutex for the main thread
-		static bool started; ///< Stores if the threads have been started
+		static std::atomic_bool started; ///< Stores if the threads have been started
 	};
 }
 #endif // CAN_HARDWARE_INTERFACE_HPP

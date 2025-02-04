@@ -45,6 +45,7 @@ namespace isobus
 
 	std::shared_ptr<InternalControlFunction> CANNetworkManager::create_internal_control_function(NAME desiredName, std::uint8_t CANPort, std::uint8_t preferredAddress)
 	{
+		LOCK_GUARD(Mutex, internalControlFunctionsMutex);
 		auto controlFunction = std::make_shared<InternalControlFunction>(desiredName, preferredAddress, CANPort);
 		controlFunction->pgnRequestProtocol.reset(new ParameterGroupNumberRequestProtocol(controlFunction));
 		internalControlFunctions.push_back(controlFunction);
@@ -606,6 +607,7 @@ namespace isobus
 
 	void CANNetworkManager::update_internal_cfs()
 	{
+		LOCK_GUARD(Mutex, internalControlFunctionsMutex);
 		for (const auto &currentInternalControlFunction : internalControlFunctions)
 		{
 			if (currentInternalControlFunction->update_address_claiming())
