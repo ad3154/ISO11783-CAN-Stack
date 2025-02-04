@@ -92,6 +92,8 @@ namespace isobus
 
 		std::mutex managedWorkingSetMutex; ///< A mutex to protect the interface of the managed working set
 		VTColourTable workingSetColourTable; ///< This working set's colour table
+		std::uint32_t iopSize = 0; ///< Total size of the IOP in bytes
+		std::uint32_t transferredIopSize = 0; ///< Total number of IOP bytes transferred
 		std::map<std::uint16_t, std::shared_ptr<VTObject>> vtObjectTree; ///< The C++ object representation (deserialized) of the object pool being managed
 		std::vector<std::vector<std::uint8_t>> iopFilesRawData; ///< Raw IOP File data from the client
 		std::uint16_t workingSetID = NULL_OBJECT_ID; ///< Stores the object ID of the working set object itself

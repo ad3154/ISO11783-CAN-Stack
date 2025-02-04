@@ -8,6 +8,7 @@
 //================================================================================================
 #include "isobus/isobus/isobus_virtual_terminal_server_managed_working_set.hpp"
 
+#include "isobus/isobus/can_network_manager.hpp"
 #include "isobus/isobus/can_stack_logger.hpp"
 #include "isobus/utility/to_string.hpp"
 
@@ -127,10 +128,50 @@ namespace isobus
 		return workingSetDeletionRequested;
 	}
 
+	void VirtualTerminalServerManagedWorkingSet::set_iop_size(std::uint32_t newIopSize)
+	{
+		const std::lock_guard<std::mutex> lock(managedWorkingSetMutex);
+		objectPoolTransferInProgress = true;
+		iopSize = newIopSize;
+	}
+
+	float VirtualTerminalServerManagedWorkingSet::iop_load_percentage() const
+	{
+		if (processingState != ObjectPoolProcessingThreadState::None || transferredIopSize > iopSize)
+		{
+			return 100.0f;
+		}
+
+		// if IOP transfer is not completed check if there is an ongoing IOP transfer to us
+		auto sessions = CANNetworkManager::CANNetwork.get_active_transport_protocol_sessions(0);
+		auto currentTransferredIopSize = transferredIopSize;
+		for (const auto &session : sessions)
+		{
+			if (session->get_source()->get_address() == get_control_function()->get_address() &&
+			    (static_cast<std::uint32_t>(CANLibParameterGroupNumber::ECUtoVirtualTerminal) == session->get_parameter_group_number()) &&
+			    (session->get_data().size() >= 1) &&
+			    (session->get_data().get_byte(0) == 0x11)) // ObjectPoolTransferMessage
+			{
+				currentTransferredIopSize += session->get_total_bytes_transferred();
+			}
+		}
+
+		if (currentTransferredIopSize > iopSize)
+		{
+			return 100.0f;
+		}
+
+		return (currentTransferredIopSize / (float)iopSize) * 100.0f;
+	}
+
 	void VirtualTerminalServerManagedWorkingSet::set_object_pool_processing_state(ObjectPoolProcessingThreadState value)
 	{
 		const std::lock_guard<std::mutex> lock(managedWorkingSetMutex);
 		processingState = value;
+		if (value != ObjectPoolProcessingThreadState::None)
+		{
+			objectPoolTransferInProgress = false;
+		}
 	}
 
 	void VirtualTerminalServerManagedWorkingSet::worker_thread_function()
@@ -168,6 +209,11 @@ namespace isobus
 			CANStackLogger::error("[WS]: Object pool failed to be parsed.");
 			set_object_pool_processing_state(ObjectPoolProcessingThreadState::Fail);
 		}
+	}
+
+	bool VirtualTerminalServerManagedWorkingSet::is_object_pool_transfer_in_progress() const
+	{
+		return iop_load_percentage() != 0.0f;
 	}
 
 } // namespace isobus

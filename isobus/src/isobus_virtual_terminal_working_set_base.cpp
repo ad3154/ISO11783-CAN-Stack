@@ -24,6 +24,7 @@ namespace isobus
 
 	void VirtualTerminalWorkingSetBase::add_iop_raw_data(const std::vector<std::uint8_t> &dataToAdd)
 	{
+		transferredIopSize += dataToAdd.size();
 		iopFilesRawData.push_back(dataToAdd);
 	}
 

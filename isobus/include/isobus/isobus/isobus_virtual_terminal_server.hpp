@@ -673,6 +673,7 @@ namespace isobus
 		LanguageCommandInterface languageCommandInterface; ///< The language command interface for the server
 		std::shared_ptr<InternalControlFunction> serverInternalControlFunction; ///< The internal control function for the server
 		std::vector<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>> managedWorkingSetList; ///< The list of managed working sets
+		std::map<std::shared_ptr<VirtualTerminalServerManagedWorkingSet>, bool> managedWorkingSetIopLoadStateMap; ///< A map to hold the IOP load state per session
 		std::shared_ptr<VirtualTerminalServerManagedWorkingSet> activeWorkingSet; ///< The active working set
 		std::uint32_t statusMessageTimestamp_ms = 0; ///< The timestamp of the last status message sent
 		std::uint16_t activeWorkingSetDataMaskObjectID = NULL_OBJECT_ID; ///< The object ID of the active working set's data mask

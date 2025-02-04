@@ -283,6 +283,7 @@ namespace isobus
 									{
 										CANStackLogger::debug("[VT Server]: Callback indicated there may be enough memory, but since there is overhead associated to object storage it is impossible to be sure.", requiredMemory);
 									}
+									cf->set_iop_size(requiredMemory);
 
 									std::array<std::uint8_t, CAN_DATA_LENGTH> buffer = { 0 };
 									buffer[0] = static_cast<std::uint8_t>(Function::GetMemoryMessage);
@@ -447,6 +448,7 @@ namespace isobus
 									auto loadedVersion = parentServer->load_version(versionLabel, message.get_source_control_function()->get_NAME());
 									if (!loadedVersion.empty())
 									{
+										cf->set_iop_size(loadedVersion.size());
 										cf->add_iop_raw_data(loadedVersion);
 									}
 									else
